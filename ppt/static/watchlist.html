@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Watchlist - Paper Trade</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/static/icon4-dollar.svg">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/nav.js"></script>
+    <style>
+        .service-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .service-status.ok { background: rgba(63, 185, 80, 0.15); border: 1px solid #3fb950; }
+        .service-status.error { background: rgba(248, 81, 73, 0.15); border: 1px solid #f85149; }
+        .service-status.unknown { background: #21262d; border: 1px solid #30363d; }
+        .service-status .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .service-status.ok .dot { background: #3fb950; }
+        .service-status.error .dot { background: #f85149; }
+        .service-status.unknown .dot { background: #8b949e; }
+        
+        .add-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .add-form input {
+            flex: 1;
+            padding: 10px 12px;
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-size: 14px;
+        }
+        .add-form input:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        
+        .watchlist-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .watchlist-table th {
+            text-align: left;
+            padding: 10px 12px;
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            color: #8b949e;
+            font-weight: 500;
+        }
+        .watchlist-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #21262d;
+        }
+        .watchlist-table tr:hover {
+            background: #161b22;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .status-badge.ok { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
+        .status-badge.error { background: rgba(248, 81, 73, 0.2); color: #f85149; }
+        .status-badge.pending { background: rgba(136, 146, 157, 0.2); color: #8b949e; }
+        .status-badge.unknown { background: rgba(136, 146, 157, 0.2); color: #8b949e; }
+        
+        .btn-icon {
+            background: none;
+            border: none;
+            color: #8b949e;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn-icon:hover {
+            background: #21262d;
+            color: #f85149;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #8b949e;
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-bottom: 16px;
+            color: #58a6ff;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        
+        .latency {
+            color: #8b949e;
+            font-size: 11px;
+        }
+        
+        .presets {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #21262d;
+        }
+        .presets-title {
+            font-size: 12px;
+            color: #8b949e;
+            margin-bottom: 8px;
+        }
+        .preset-btn {
+            background: #21262d;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 6px;
+            margin-bottom: 6px;
+        }
+        .preset-btn:hover {
+            background: #30363d;
+        }
+    </style>
+</head>
+<body>
+    <div class="header"></div>
+    
+    <div class="service-status unknown" id="service-status" style="max-width:1200px;margin:0 auto 20px auto;">
+        <div class="dot"></div>
+        <div>
+            <strong>ZuiLow Quote Service</strong>
+            <span id="service-message"></span>
+            <span class="latency" id="service-latency"></span>
+        </div>
+        <button class="btn btn-sm" onclick="testService()" style="margin-left:auto;">Test</button>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>Add Symbol</h2>
+            <div class="add-form">
+                <input type="text" id="add-symbol" placeholder="Symbol (e.g. AAPL, HK.00700)">
+                <button class="btn" onclick="addSymbol()">Add</button>
+            </div>
+
+            <div class="presets">
+                <div class="presets-title">Quick add:</div>
+                <button class="preset-btn" onclick="addPreset('AAPL')">AAPL</button>
+                <button class="preset-btn" onclick="addPreset('GOOGL')">GOOGL</button>
+                <button class="preset-btn" onclick="addPreset('MSFT')">MSFT</button>
+                <button class="preset-btn" onclick="addPreset('TSLA')">TSLA</button>
+                <button class="preset-btn" onclick="addPreset('NVDA')">NVDA</button>
+                <button class="preset-btn" onclick="addPreset('HK.00700')">HK.00700</button>
+                <button class="preset-btn" onclick="addPreset('HK.09988')">HK.09988</button>
+                <button class="preset-btn" onclick="addPreset('SH.600519')">600519.SS</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Actions</h2>
+            <div class="actions" style="flex-direction: column; gap: 12px;">
+                <button class="btn" onclick="refreshAll()" style="width:100%;">Refresh All</button>
+                <button class="btn" onclick="initDefault()" style="width:100%;background:#21262d;border:1px solid #30363d;">Load Default</button>
+                <button class="btn btn-reset" onclick="clearAll()" style="width:100%;">Clear</button>
+            </div>
+            <div style="margin-top:16px; font-size:12px; color:#8b949e;">
+                <p>Symbol formats: AAPL, HK.00700, US.AAPL, 0700.HK (auto-normalized)</p>
+                <p>Quotes from ZuiLow (refresh or after order)</p>
+            </div>
+        </div>
+
+        <div class="card" style="grid-column: span 2;">
+            <h2>Watchlist <span id="watchlist-count" style="font-size:12px;color:#8b949e;margin-left:8px;"></span></h2>
+            <div id="watchlist-container">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        async function testService() {
+            const statusEl = document.getElementById('service-status');
+            const msgEl = document.getElementById('service-message');
+            const latencyEl = document.getElementById('service-latency');
+            const indicatorEl = document.getElementById('service-indicator');
+
+            if (!statusEl || !msgEl || !latencyEl) return;
+
+            statusEl.className = 'service-status unknown';
+            msgEl.textContent = 'Checking...';
+            latencyEl.textContent = '';
+
+            try {
+                const res = await fetch('/api/watchlist/test');
+                const data = await res.json();
+
+                if (data.status === 'ok') {
+                    statusEl.className = 'service-status ok';
+                    msgEl.textContent = `OK (AAPL: $${data.price})`;
+                    if (indicatorEl) { indicatorEl.textContent = '● OK'; indicatorEl.style.color = '#3fb950'; }
+                } else {
+                    statusEl.className = 'service-status error';
+                    msgEl.textContent = data.message || 'Error';
+                    if (indicatorEl) { indicatorEl.textContent = '● Error'; indicatorEl.style.color = '#f85149'; }
+                }
+                latencyEl.textContent = `(${data.latency_ms}ms)`;
+            } catch (e) {
+                statusEl.className = 'service-status error';
+                msgEl.textContent = 'Connection failed';
+                if (indicatorEl) { indicatorEl.textContent = '● Error'; indicatorEl.style.color = '#f85149'; }
+            }
+        }
+
+        async function loadWatchlist() {
+            try {
+                const res = await fetch('/api/watchlist');
+                const data = await res.json();
+                const container = document.getElementById('watchlist-container');
+                const countEl = document.getElementById('watchlist-count');
+                
+                if (!data.watchlist || data.watchlist.length === 0) {
+                    container.innerHTML = '<div class="empty-state">No symbols. Add one above.</div>';
+                    countEl.textContent = '';
+                    return;
+                }
+
+                countEl.textContent = `(${data.watchlist.length})`;
+
+                let html = `
+                    <table class="watchlist-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Name</th>
+                                <th>Price</th>
+                                <th>Status</th>
+                                <th>Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                for (const item of data.watchlist) {
+                    const statusClass = item.status || 'unknown';
+                    const statusText = {
+                        'ok': 'OK',
+                        'error': 'Error',
+                        'pending': 'Pending',
+                        'unknown': '-'
+                    }[statusClass] || statusClass;
+                    
+                    const price = item.last_price ? `$${item.last_price.toFixed(2)}` : '-';
+                    const updateTime = item.last_update ? new Date(item.last_update).toLocaleString() : '-';
+                    const errorTip = item.error ? ` title="${item.error}"` : '';
+                    
+                    html += `
+                        <tr>
+                            <td><strong>${item.symbol}</strong></td>
+                            <td>${item.name || '-'}</td>
+                            <td>${price}</td>
+                            <td><span class="status-badge ${statusClass}"${errorTip}>${statusText}</span></td>
+                            <td style="color:#8b949e;font-size:12px;">${updateTime}</td>
+                            <td>
+                                <button class="btn-icon" onclick="refreshOne('${item.symbol}')" title="Refresh">Refresh</button>
+                                <button class="btn-icon" onclick="removeSymbol('${item.symbol}')" title="Remove">Remove</button>
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            } catch (e) {
+                document.getElementById('watchlist-container').innerHTML =
+                    `<div class="empty-state" style="color:#f85149;">Load failed: ${e.message}</div>`;
+            }
+        }
+
+        async function addSymbol() {
+            const input = document.getElementById('add-symbol');
+            const symbol = input.value.trim();
+            if (!symbol) return;
+            
+            try {
+                const res = await fetch('/api/watchlist', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symbol})
+                });
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    input.value = '';
+                    loadWatchlist();
+                }
+            } catch (e) {
+                alert('Add failed: ' + e.message);
+            }
+        }
+        
+        // Quick add
+        async function addPreset(symbol) {
+            try {
+                const res = await fetch('/api/watchlist', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symbol})
+                });
+                const data = await res.json();
+                if (!data.error) {
+                    loadWatchlist();
+                }
+            } catch (e) {}
+        }
+        
+        // Remove symbol
+        async function removeSymbol(symbol) {
+            if (!confirm(`Remove ${symbol}?`)) return;
+
+            try {
+                await fetch(`/api/watchlist/${encodeURIComponent(symbol)}`, {method: 'DELETE'});
+                loadWatchlist();
+            } catch (e) {
+                alert('Remove failed: ' + e.message);
+            }
+        }
+
+        async function refreshOne(symbol) {
+            try {
+                const res = await fetch(`/api/quote/${encodeURIComponent(symbol)}`);
+                const quote = await res.json();
+                
+                // Update DB
+                await fetch('/api/watchlist/refresh', {method: 'POST'});
+                loadWatchlist();
+            } catch (e) {
+                alert('Refresh failed: ' + e.message);
+            }
+        }
+        
+        // Refresh all
+        async function refreshAll() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Refreshing...';
+            
+            try {
+                const res = await fetch('/api/watchlist/refresh', {method: 'POST'});
+                const data = await res.json();
+                
+                btn.textContent = `✓ ${data.ok} ok, ${data.fail} fail`;
+                setTimeout(() => {
+                    btn.textContent = 'Refresh All';
+                }, 2000);
+
+                loadWatchlist();
+            } catch (e) {
+                btn.textContent = 'Refresh failed';
+                setTimeout(() => {
+                    btn.textContent = 'Refresh All';
+                }, 2000);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        // Clear list
+        async function clearAll() {
+            if (!confirm('Clear all watchlist?')) return;
+
+            try {
+                await fetch('/api/watchlist/clear', {method: 'POST'});
+                loadWatchlist();
+            } catch (e) {
+                alert('Clear failed: ' + e.message);
+            }
+        }
+
+        async function initDefault() {
+            try {
+                const res = await fetch('/api/watchlist/init', {method: 'POST'});
+                const data = await res.json();
+                alert(data.message);
+                loadWatchlist();
+            } catch (e) {
+                alert('Init failed: ' + e.message);
+            }
+        }
+
+        document.getElementById('add-symbol').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') addSymbol();
+        });
+
+        // Load list from DB only; no quote request until user clicks Test or Refresh
+        loadWatchlist();
+    </script>
+    <div id="footer-time" style="font-size:11px;color:#8b949e;margin:12px 16px;"></div>
+    <script src="/static/js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof initNav === 'function') {
+                initNav({ title: 'Watchlist', currentRoute: 'watchlist' });
+            }
+        });
+    </script>
+</body>
+</html>

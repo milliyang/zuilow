@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZuiLow - Scheduler</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/icon-monitor.svg">
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-dot.running { background: #3fb950; box-shadow: 0 0 8px rgba(63,185,80,0.5); }
+        .status-dot.stopped { background: #484f58; }
+        
+        .job-card {
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 6px;
+            padding: 14px;
+            margin-bottom: 12px;
+        }
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .job-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #f0f6fc;
+        }
+        .job-meta {
+            font-size: 12px;
+            color: #8b949e;
+            margin-bottom: 8px;
+        }
+        .job-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 11px;
+            color: #8b949e;
+        }
+        .job-stats .success { color: #3fb950; }
+        .job-stats .failed { color: #f85149; }
+        
+        .jobs-table { font-size: 12px; }
+        .jobs-table th, .jobs-table td { padding: 6px 10px; }
+        .jobs-table .job-name { font-weight: 600; color: #f0f6fc; }
+        .jobs-table .tag { font-size: 10px; }
+        .jobs-table td.success { color: #3fb950; }
+        .jobs-table td.failed { color: #f85149; }
+        
+        .stats-row {
+            display: flex;
+            gap: 24px;
+            margin-top: 16px;
+        }
+        .stat-box {
+            text-align: center;
+        }
+        .stat-box .value {
+            font-size: 28px;
+            font-weight: 600;
+            color: #f0f6fc;
+        }
+        .stat-box .label {
+            font-size: 11px;
+            color: #8b949e;
+            text-transform: uppercase;
+        }
+        .stat-box.success .value { color: #3fb950; }
+        .stat-box.failed .value { color: #f85149; }
+        .stat-box.signals .value { color: #58a6ff; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><img src="/static/img/icon-monitor.svg" alt="" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;">ZuiLow</h1>
+        <nav class="nav">
+            <a href="/">Account</a>
+            <a href="/backtest">Backtest</a>
+            <a href="/scheduler" class="active">Scheduler</a>
+            <a href="/signals">Signals</a>
+            <a href="/strategies">Strategies</a>
+            <a href="/live">Live</a>
+            <a href="/brokers">Brokers</a>
+            <a href="/status">Status</a>
+            <a href="#" class="nav-logout" onclick="logout(); return false;">Log out</a>
+        </nav>
+    </div>
+    
+    <div class="main-content">
+        <!-- Control -->
+        <div class="card">
+            <div class="card-title">
+                <span>Scheduler status</span>
+                <div>
+                    <button id="btn-start" class="btn btn-primary" style="padding:6px 14px;" onclick="startScheduler()">Start</button>
+                    <button id="btn-stop" class="btn btn-danger" style="padding:6px 14px;" onclick="stopScheduler()" disabled>Stop</button>
+                    <button class="btn btn-secondary" style="padding:6px 14px;" onclick="refreshStatus()">Refresh</button>
+                </div>
+            </div>
+            
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+                <span class="status-dot stopped" id="status-dot"></span>
+                <span id="scheduler-status" style="font-size:14px;">Stopped</span>
+            </div>
+            
+            <div id="stats-panel" class="stats-row hidden">
+                <div class="stat-box">
+                    <div class="value" id="stat-total">0</div>
+                    <div class="label">Total runs</div>
+                </div>
+                <div class="stat-box success">
+                    <div class="value" id="stat-success">0</div>
+                    <div class="label">Success</div>
+                </div>
+                <div class="stat-box failed">
+                    <div class="value" id="stat-failed">0</div>
+                    <div class="label">Failed</div>
+                </div>
+                <div class="stat-box signals">
+                    <div class="value" id="stat-signals">0</div>
+                    <div class="label">Signals</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Jobs -->
+        <div class="card">
+            <div class="card-title">Jobs</div>
+            <table class="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Job</th>
+                        <th>Strategy</th>
+                        <th>Mode</th>
+                        <th>Trigger</th>
+                        <th>Symbols</th>
+                        <th>Runs</th>
+                        <th>Success</th>
+                        <th>Failed</th>
+                        <th>Last</th>
+                    </tr>
+                </thead>
+                <tbody id="jobs-container">
+                    <tr><td colspan="9" style="text-align:center; color:#8b949e; font-size:12px;">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- History -->
+        <div class="card">
+            <div class="card-title">
+                <span>Run history</span>
+                <select id="filter-job" onchange="historyGoPage(1); loadHistory();" style="padding:4px 8px; font-size:11px; background:#0d1117; border:1px solid #21262d; border-radius:4px; color:#c9d1d9;">
+                    <option value="">All jobs</option>
+                </select>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Job</th>
+                        <th>Strategy</th>
+                        <th>Trigger time</th>
+                        <th>Duration</th>
+                        <th>Status</th>
+                        <th>Signals</th>
+                    </tr>
+                </thead>
+                <tbody id="history-tbody">
+                    <tr><td colspan="6" style="text-align:center; color:#8b949e;">No history</td></tr>
+                </tbody>
+            </table>
+            <div class="pagination" id="history-pagination" style="display:none; margin-top:10px;">
+                <button type="button" id="history-prev" onclick="historyPrev()">Prev</button>
+                <span id="history-page-info">Page 1 of 1</span>
+                <button type="button" id="history-next" onclick="historyNext()">Next</button>
+                <span>Per page</span>
+                <select id="history-limit" onchange="historyGoPage(1); loadHistory();">
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <span id="history-total-info">Total: 0</span>
+            </div>
+            <div id="footer-time" style="font-size:11px;color:#8b949e;margin-top:12px;"></div>
+        </div>
+    </div>
+    
+    <script src="/static/js/common.js"></script>
+    <script>
+        async function startScheduler() {
+            try {
+                const resp = await fetch('/api/scheduler/start', { method: 'POST' });
+                const data = await resp.json();
+                if (data.ok || data.success) {
+                    refreshStatus();
+                } else {
+                    alert('Start failed: ' + (data.error || data.message || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Start failed: ' + (e.message || String(e)));
+            }
+        }
+        
+        async function stopScheduler() {
+            try {
+                const resp = await fetch('/api/scheduler/stop', { method: 'POST' });
+                const data = await resp.json();
+                if (data.ok || data.success) {
+                    refreshStatus();
+                } else {
+                    alert('Stop failed: ' + (data.error || data.message || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Stop failed: ' + (e.message || String(e)));
+            }
+        }
+        
+        async function refreshStatus() {
+            try {
+                const statusResp = await fetch('/api/scheduler/status');
+                const status = await statusResp.json();
+                
+                const isRunning = status.running;
+                const dot = document.getElementById('status-dot');
+                const statusText = document.getElementById('scheduler-status');
+                
+                if (isRunning) {
+                    dot.className = 'status-dot running';
+                    statusText.textContent = 'Running (' + (status.jobs_count || 0) + ' jobs)';
+                    document.getElementById('btn-start').disabled = true;
+                    document.getElementById('btn-stop').disabled = false;
+                } else {
+                    dot.className = 'status-dot stopped';
+                    statusText.textContent = 'Stopped';
+                    document.getElementById('btn-start').disabled = false;
+                    document.getElementById('btn-stop').disabled = true;
+                }
+                
+                displayJobs(status.jobs || []);
+                
+                // Stats
+                const statsResp = await fetch('/api/scheduler/statistics');
+                const stats = await statsResp.json();
+                
+                if (stats.total_runs > 0) {
+                    document.getElementById('stats-panel').classList.remove('hidden');
+                    document.getElementById('stat-total').textContent = stats.total_runs;
+                    document.getElementById('stat-success').textContent = stats.success_count;
+                    document.getElementById('stat-failed').textContent = stats.failed_count;
+                    document.getElementById('stat-signals').textContent = stats.total_signals;
+                }
+                
+                loadHistory();
+            } catch (e) {
+                console.error('Refresh failed:', e);
+            }
+        }
+        
+        function escapeHtml(s) {
+            if (s == null) return '';
+            const t = String(s);
+            return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        
+        function displayJobs(jobs) {
+            const container = document.getElementById('jobs-container');
+            jobs = Array.isArray(jobs) ? jobs.filter(function(j) { return j != null; }) : [];
+            
+            if (jobs.length === 0) {
+                container.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#8b949e; font-size:12px;">No jobs</td></tr>';
+                const filter = document.getElementById('filter-job');
+                const savedVal = filter.value;
+                filter.innerHTML = '<option value="">All jobs</option>';
+                filter.value = savedVal || '';
+                return;
+            }
+            
+            const triggerText = function(job) { return job.trigger === 'cron' ? (job.cron || '-') : (job.minutes != null ? job.minutes + ' min' : '-'); };
+            const symbolsText = function(job) { return (job.symbols || []).join(', ') || '-'; };
+            const lastText = function(job) { return job.last_run ? new Date(job.last_run).toLocaleString() : 'Never'; };
+            const runCount = function(job) { return job.run_count || 0; };
+            const errorCount = function(job) { return job.error_count || 0; };
+            
+            container.innerHTML = jobs.map(function(job) {
+                const name = escapeHtml(job.name || '');
+                const strategy = escapeHtml(job.strategy || '-');
+                const mode = escapeHtml(job.mode || '-');
+                const trigger = escapeHtml(triggerText(job));
+                const symbols = escapeHtml(symbolsText(job));
+                const runs = runCount(job);
+                const errs = errorCount(job);
+                const last = lastText(job);
+                return '<tr><td><span class="job-name">' + name + '</span> <span class="tag ' + (job.enabled ? 'filled' : '') + '">' + (job.enabled ? 'Enabled' : 'Disabled') + '</span></td><td>' + strategy + '</td><td>' + mode + '</td><td>' + trigger + '</td><td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + symbols + '">' + symbols + '</td><td>' + runs + '</td><td class="success">' + (runs - errs) + '</td><td class="failed">' + errs + '</td><td style="font-size:11px; color:#8b949e;">' + last + '</td></tr>';
+            }).join('');
+            
+            // Update filter without firing change: save value, update options, restore value
+            const filter = document.getElementById('filter-job');
+            const savedVal = filter.value;
+            filter.innerHTML = '<option value="">All jobs</option>' +
+                jobs.map(function(job) { const n = escapeHtml(job.name || ''); return '<option value="' + n + '">' + n + '</option>'; }).join('');
+            if (savedVal) filter.value = savedVal;
+        }
+        
+        let historyPage = 1;
+        function historyGoPage(p) { historyPage = Math.max(1, p); }
+        function historyPrev() { historyGoPage(historyPage - 1); loadHistory(); }
+        function historyNext() { historyGoPage(historyPage + 1); loadHistory(); }
+        
+        async function loadHistory() {
+            try {
+                const jobName = document.getElementById('filter-job').value;
+                const limit = parseInt(document.getElementById('history-limit').value, 10) || 20;
+                const params = new URLSearchParams({ page: String(historyPage), limit: String(limit) });
+                if (jobName) params.set('job_name', jobName);
+                const resp = await fetch('/api/scheduler/history?' + params.toString());
+                const data = await resp.json();
+                const list = data.histories || (Array.isArray(data) ? data : []);
+                const total = data.total != null ? data.total : list.length;
+                const page = data.page != null ? data.page : 1;
+                const limitResp = data.limit != null ? data.limit : limit;
+                historyPage = page;
+                const totalPages = Math.max(1, Math.ceil(total / limitResp));
+                
+                const tbody = document.getElementById('history-tbody');
+                const bar = document.getElementById('history-pagination');
+                
+                if (list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#8b949e;">No history</td></tr>';
+                    bar.style.display = 'none';
+                    return;
+                }
+                
+                tbody.innerHTML = list.map(h => {
+                    const duration = h.end_time ? 
+                        ((new Date(h.end_time) - new Date(h.start_time)) / 1000).toFixed(1) + 's' : '-';
+                    
+                    const statusTag = h.status === 'success' ? 
+                        '<span class="tag filled">Success</span>' :
+                        h.status === 'failed' ?
+                        '<span class="tag sell">Failed</span>' :
+                        '<span class="tag pending">Running</span>';
+                    
+                    return `
+                        <tr>
+                            <td>${h.job_name}</td>
+                            <td>${h.strategy}</td>
+                            <td>${new Date(h.trigger_time).toLocaleString()}</td>
+                            <td>${duration}</td>
+                            <td>${statusTag}</td>
+                            <td>${h.signals_count}</td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                bar.style.display = 'flex';
+                document.getElementById('history-page-info').textContent = 'Page ' + page + ' of ' + totalPages;
+                document.getElementById('history-total-info').textContent = 'Total: ' + total;
+                document.getElementById('history-prev').disabled = page <= 1;
+                document.getElementById('history-next').disabled = page >= totalPages;
+            } catch (e) {
+                console.error('Load history failed:', e);
+                document.getElementById('history-pagination').style.display = 'none';
+            }
+        }
+        
+        // Init
+        refreshStatus();
+        refreshFooterTime('footer-time');
+    </script>
+</body>
+</html>

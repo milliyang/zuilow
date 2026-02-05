@@ -1,0 +1,47 @@
+# Paper Trade Dependencies
+# Flask Web Framework
+flask>=3.0.0
+flask-socketio>=5.3.0
+flask-cors>=4.0.0
+flask-sqlalchemy>=3.1.0
+flask-login>=0.6.0
+flask-wtf>=1.2.0
+
+# Database
+sqlalchemy>=2.0.0
+
+# HTTP Client
+requests>=2.31.0
+httpx>=0.25.0
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.26.0
+yfinance>=0.2.0
+
+# Security
+python-dotenv>=1.0.0
+werkzeug>=3.0.0
+bcrypt>=4.1.0
+
+# WebSocket & Async
+eventlet>=0.33.0
+gevent>=23.9.0
+websocket-client>=1.6.0
+
+# Logging & Monitoring
+loguru>=0.7.0
+
+# Scheduler
+apscheduler>=3.10.0
+
+# YAML
+pyyaml>=6.0.0
+
+# Utils
+python-dateutil>=2.8.0
+pytz>=2024.1
+
+# OpenTimestamps
+opentimestamps-client>=0.7.0
+PyGithub>=2.0.0

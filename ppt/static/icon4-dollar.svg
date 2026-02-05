@@ -1,0 +1,11 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" rx="6" fill="#161b22"/>
+  <circle cx="16" cy="16" r="11" stroke="url(#dollar-grad)" stroke-width="2"/>
+  <path d="M16 8v16M12 12c0-2 2-2.5 4-2.5s4 .5 4 2.5-2 2.5-4 2.5-4 .5-4 2.5 2 2.5 4 2.5" stroke="#3fb950" stroke-width="2" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="dollar-grad" x1="5" y1="5" x2="27" y2="27" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3fb950"/>
+      <stop offset="1" stop-color="#58a6ff"/>
+    </linearGradient>
+  </defs>
+</svg>

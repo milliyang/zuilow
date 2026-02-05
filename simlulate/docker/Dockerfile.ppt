@@ -1,0 +1,35 @@
+# Build from repo root (context ${REPO_ROOT}) so ppt/ is available.
+# Same pattern as Dockerfile.stime / Dockerfile.zuilow for simulation stack.
+FROM python:3.11-slim
+
+WORKDIR /workspace
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc python3-dev libpq-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY ppt/requirements.txt ppt/
+RUN pip install --no-cache-dir -r ppt/requirements.txt
+RUN pip install gunicorn eventlet>=0.24.1
+
+COPY ppt/ ppt/
+# 去掉镜像内宿主的 run 数据，避免新卷挂载时被 Docker 用镜像内容初始化，导致 OTS/DB“永远有数据”
+RUN rm -rf ppt/run && mkdir -p ppt/run/db ppt/run/logs ppt/run/opentimestamps && chmod -R 777 ppt/run
+
+WORKDIR /workspace/ppt
+
+EXPOSE 11182
+
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:11182", \
+     "--worker-class", "eventlet", \
+     "--workers", "1", \
+     "--reload", \
+     "--log-level", "debug", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "app:app"]

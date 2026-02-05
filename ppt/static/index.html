@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Paper Trade</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/static/icon4-dollar.svg">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/nav.js"></script>
+</head>
+<body>
+    <div class="header"></div>
+    
+    <div class="account-bar">
+        <span class="account-label">Account:</span>
+        <select id="account-select" onchange="switchAccount()"></select>
+        <button class="btn-sm btn-add admin-only" onclick="createAccount()">+ New</button>
+        <button class="btn-sm btn-del admin-only" onclick="deleteAccount()">Delete</button>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>Account Overview</h2>
+            <div class="value" id="total-value">$0</div>
+            <div class="label">Total Assets</div>
+            <div class="stats-grid">
+                <div class="stat-item"><div class="label">Cash</div><div class="stat-value" id="cash">$0</div></div>
+                <div class="stat-item"><div class="label">Position Value</div><div class="stat-value" id="position-value">$0</div></div>
+                <div class="stat-item"><div class="label">P&amp;L</div><div class="stat-value" id="pnl">$0</div></div>
+                <div class="stat-item"><div class="label">Return %</div><div class="stat-value" id="pnl-pct">0%</div></div>
+            </div>
+            <div class="cost-stats" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:12px;color:#8b949e;">
+                <div class="label">Cost breakdown</div>
+                <div class="stats-grid" style="margin-top:4px;">
+                    <div class="stat-item"><div class="label">Commission</div><div class="stat-value negative" id="cost-commission">$0</div></div>
+                    <div class="stat-item"><div class="label">Slippage</div><div class="stat-value negative" id="cost-slippage">$0</div></div>
+                    <div class="stat-item"><div class="label">Realized P&amp;L</div><div class="stat-value" id="cost-realized">$0</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card admin-only">
+            <h2>Place Order</h2>
+            <div class="order-form">
+                <input type="text" id="symbol" placeholder="Symbol AAPL">
+                <input type="number" id="qty" placeholder="Qty" min="1">
+                <input type="number" id="price" placeholder="Price" step="0.01">
+                <select id="side">
+                    <option value="buy">Buy</option>
+                    <option value="sell">Sell</option>
+                </select>
+                <div class="btn-row">
+                    <button class="btn btn-buy" onclick="placeOrder()">Place Order</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Positions <button class="export-btn" onclick="loadPositionsRealtime()">&#x1F504; Realtime</button></h2>
+            <table class="positions-table">
+                <thead><tr><th>Symbol</th><th class="num">Qty</th><th class="num">Cost</th><th class="num">Price</th><th class="num">P&amp;L</th><th class="num">P&amp;L %</th></tr></thead>
+                <tbody id="positions-body"></tbody>
+            </table>
+            <div id="positions-summary" style="margin-top:8px;font-size:11px;color:#8b949e;"></div>
+        </div>
+        
+        <div class="card">
+            <h2>Recent Trades <a href="/api/export/trades" class="export-btn">&#x2193; CSV</a></h2>
+            <div class="trades" id="trades-list"></div>
+        </div>
+        
+        <div class="card">
+            <h2>Simulation <span id="sim-preset" style="font-size:10px;color:#58a6ff;margin-left:8px;"></span></h2>
+            <div id="simulation-config" style="font-size: 11px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <div><span class="label">Slippage:</span> <span id="sim-slippage">-</span></div>
+                    <div><span class="label">Commission:</span> <span id="sim-commission">-</span></div>
+                    <div><span class="label">Partial fill:</span> <span id="sim-partial">-</span></div>
+                    <div><span class="label">Latency:</span> <span id="sim-latency">-</span></div>
+                </div>
+                <div style="margin-top:8px;color:#8b949e;font-size:10px;">
+                    config/simulation.yaml <button class="export-btn" onclick="loadSimulation()">&#x1F504;</button>
+                </div>
+                <div class="admin-only" style="margin-top:10px;padding-top:8px;border-top:1px solid #21262d;">
+                    <span class="label">Webhook Token:</span>
+                    <code id="webhook-token" style="font-size:10px;background:#161b22;padding:2px 6px;border-radius:3px;margin-left:4px;word-break:break-all;">-</code>
+                    <button class="export-btn" onclick="copyToken()" title="Copy">&#x1F4CB;</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="grid-column: span 2;">
+            <h2>Equity Curve
+                <button class="export-btn" onclick="updateEquity()" title="Update equity with market price">&#x1F4CA; Update</button>
+                <a href="/api/export/equity" class="export-btn">&#x2193; CSV</a>
+            </h2>
+            <canvas id="equity-chart" height="200"></canvas>
+        </div>
+        
+        <div class="card">
+            <h2>Analytics <button class="export-btn" onclick="loadAnalytics()">&#x1F504;</button></h2>
+            <div style="font-size: 11px;">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="label">Sharpe</div>
+                        <div class="stat-value" id="sharpe-ratio">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Max Drawdown</div>
+                        <div class="stat-value" id="max-drawdown">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Ann. Return</div>
+                        <div class="stat-value" id="annual-return">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Volatility</div>
+                        <div class="stat-value" id="volatility">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Trade Stats</h2>
+            <div style="font-size: 11px;">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="label">Win Rate</div>
+                        <div class="stat-value" id="win-rate">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Profit Factor</div>
+                        <div class="stat-value" id="profit-factor">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Avg Win</div>
+                        <div class="stat-value positive" id="avg-win">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Avg Loss</div>
+                        <div class="stat-value negative" id="avg-loss">-</div>
+                    </div>
+                </div>
+                <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:8px;">
+                    <span class="label">Closed:</span> <span id="total-trades">0</span> |
+                    <span class="label">Net P&amp;L:</span> <span id="net-profit">$0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="grid-column: span 2;">
+            <h2>Position Analysis</h2>
+            <div style="font-size: 11px;">
+                <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="stat-item">
+                        <div class="label"># Positions</div>
+                        <div class="stat-value" id="pos-count">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Position %</div>
+                        <div class="stat-value" id="pos-pct">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">Top 1</div>
+                        <div class="stat-value" id="top1-pct">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">HHI</div>
+                        <div class="stat-value" id="hhi">-</div>
+                    </div>
+                </div>
+                <div id="position-bars" style="margin-top:10px;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="footer-time" style="font-size:11px;color:#8b949e;margin:12px 16px;"></div>
+    
+    <div id="chart-tooltip" class="chart-tooltip"></div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

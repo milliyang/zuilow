@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulation Time</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-theme="simulate">
+  <div class="header">
+    <h1>Simulation Time</h1>
+    <span class="tag">Sim Time</span>
+  </div>
+
+  <div class="grid">
+    <!-- Current time -->
+    <div class="card">
+      <h2>Current sim time (UTC)</h2>
+      <div id="now" class="card-value">Loading...</div>
+      <div class="label">Single source of time for ZuiLow / PPT / DMS</div>
+    </div>
+
+    <!-- Set time (UTC) -->
+    <div class="card">
+      <h2>Set time (UTC)</h2>
+      <div class="form-row set-time-row">
+        <label class="set-time-label">Date</label>
+        <input type="date" id="setDate" title="UTC date">
+      </div>
+      <div class="form-row set-time-row">
+        <label class="set-time-label">Time</label>
+        <input type="time" id="setTimeTime" step="1" title="UTC time (HH:mm:ss)">
+      </div>
+      <div class="form-row set-time-row set-time-buttons">
+        <button type="button" id="btnSet" class="btn btn-primary">Set</button>
+        <button type="button" id="btnFillNow" class="btn btn-secondary" title="Fill with current sim time">Fill current</button>
+      </div>
+    </div>
+
+    <!-- Advance -->
+    <div class="card">
+      <h2>Advance</h2>
+      <div class="form-row">
+        <label>By</label>
+        <input type="number" id="advVal" value="1" min="1">
+        <select id="advUnit">
+          <option value="minutes">minutes</option>
+          <option value="seconds">seconds</option>
+          <option value="hours">hours</option>
+          <option value="days" selected>days</option>
+        </select>
+        <button type="button" id="btnAdvance" class="btn btn-primary">Advance</button>
+      </div>
+      <div class="form-row" style="align-items:center;margin-top:8px;">
+        <input type="checkbox" id="chkFineStep" checked title="Step by 5, 15, or 30 minutes; daily cron will fire on the hour">
+        <label for="chkFineStep" style="margin-left:6px;font-size:12px;color:#8b949e;">Fine-grained step (5/15/30 min, avoid missing time in backtest)</label>
+      </div>
+      <div id="fineStepRow" class="form-row" style="margin-top:6px;display:none;flex-wrap:wrap;gap:8px;">
+        <label style="font-size:12px;">Step interval</label>
+        <select id="fineStepMinutes">
+          <option value="5">5 min (one day = 288 steps)</option>
+          <option value="15">15 min (one day = 96 steps)</option>
+          <option value="30" selected>30 min (one day = 48 steps)</option>
+        </select>
+      </div>
+      <p id="fineStepHint" class="label" style="margin-top:6px;font-size:11px;color:#8b949e;display:none;">When checked: time is snapped to the interval boundary (e.g. 12:11 → 12:00 for 30 min), then one day of steps run. Daily cron (e.g. 09:00) will fire on the hour.</p>
+    </div>
+
+    <!-- Tick URLs and timeout (server POSTs to these in order per step; e.g. zuilow then ppt) -->
+    <div class="card">
+      <h2>Tick URLs</h2>
+      <p class="label" style="margin-bottom:6px;">Per step, this service POSTs to these URLs in order (e.g. ZuiLow then PPT). Set via env <code>TICK_URLS</code> (comma-separated). Tick timeout: per-step HTTP timeout (seconds).</p>
+      <div class="form-row">
+        <input type="text" id="zuilowTickUrl" placeholder="url1,url2 (optional override)" style="flex:1;" title="Override: comma-separated URLs, or single URL">
+        <button type="button" id="btnSetTickUrl" class="btn btn-primary">Set</button>
+      </div>
+      <div class="form-row" style="margin-top:8px;">
+        <label style="font-size:12px;">Tick timeout (seconds)</label>
+        <input type="number" id="zuilowTickTimeout" min="1" max="86400" step="1" placeholder="600" title="Per-step HTTP timeout; e.g. 3600 = 1 hour" style="width:100px;">
+        <button type="button" id="btnSetTickTimeout" class="btn btn-primary">Set</button>
+      </div>
+      <div id="zuilowTickUrlDisplay" class="label" style="margin-top:6px;font-size:12px;color:#8b949e;"></div>
+    </div>
+
+    <!-- Advance + tick -->
+    <div class="card">
+      <h2>Step &amp; trigger</h2>
+      <p class="label" style="margin-bottom:8px;">Advance by the amount above, then POST tick to each URL above <em>per step</em>. Each step: advance → POST tick (ZuiLow, then PPT, etc.) → wait for response → next step. You can check status and cancel.</p>
+      <div id="advanceTickStatus" style="font-size:12px;color:#8b949e;margin-bottom:8px;min-height:20px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button type="button" id="btnTick" class="btn btn-primary btn-block">Advance + Trigger tick</button>
+        <button type="button" id="btnTickCancel" class="btn btn-secondary" style="display:none;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="msg" class="msg" style="max-width:900px;margin:16px auto 0;display:none;"></div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

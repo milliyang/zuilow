@@ -1,0 +1,27 @@
+# Paper Trade (PPT) broker: quote/history from DMS, trading from PPT service.
+# Same pattern as Futu/IBKR: config under config/brokers/ppt.yaml.
+#
+# base_url: when ZuiLow runs on host, use a URL the host can reach (localhost or hostname).
+# When ZuiLow runs in Docker (simulate), PAPER_TRADE_URL in env overrides to http://ppt:11182;
+# do NOT set PAPER_TRADE_URL when running ZuiLow on host, or set to http://localhost:11182.
+
+ppt:
+  #base_url: "http://localhost:11182"   # PPT service URL (no trailing slash)
+  base_url: "http://one4090:11182"      # PPT service URL (no trailing slash) — use when ZuiLow on host
+  #base_url: "http://mongkok:11182"     # PPT service URL (no trailing slash)
+
+  # Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
+  webhook_token: "aB3xK9mP2qR7sT4wY6zA8dF1gH5jL0nV"                    # must match PPT WEBHOOK_TOKEN for orders
+
+dms:
+  type: dms
+  # DMS service URL (match sai/dms port, default 11183)
+  base_url: "http://mongkok:11183"
+  # API prefix (DMS registers as /api/dms)
+  api_prefix: "/api/dms"
+  # Request timeout (seconds)
+  timeout: 15
+  # Server-to-server auth: must match DMS env DMS_API_KEY (when DMS login is enabled)
+  # Generate a random secret: python -c "import secrets; print(secrets.token_hex(16))"
+  headers:
+    X-API-Key: "your-shared-secret"

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZuiLow - Live</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/icon-monitor.svg">
+    <link rel="stylesheet" href="/static/css/common.css">
+</head>
+<body>
+    <div class="header">
+        <h1><img src="/static/img/icon-monitor.svg" alt="" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;">ZuiLow</h1>
+        <nav class="nav">
+            <a href="/">Account</a>
+            <a href="/backtest">Backtest</a>
+            <a href="/scheduler">Scheduler</a>
+            <a href="/signals">Signals</a>
+            <a href="/strategies">Strategies</a>
+            <a href="/live" class="active">Live</a>
+            <a href="/brokers">Brokers</a>
+            <a href="/status">Status</a>
+            <a href="#" class="nav-logout" onclick="logout(); return false;">Log out</a>
+        </nav>
+    </div>
+    
+    <div class="container">
+        <div class="sidebar">
+            <!-- Trading Gateway: selector + account (session); connection on Brokers page -->
+            <div class="card">
+                <div class="card-title">Trading Gateway</div>
+                <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary gateway-tab active" data-gateway="futu">Futu</button>
+                    <button type="button" class="btn btn-secondary gateway-tab" data-gateway="ppt">PPT</button>
+                    <button type="button" class="btn btn-secondary gateway-tab" data-gateway="ib">IB</button>
+                </div>
+                <div id="gateway-status-row" style="font-size:11px; color:#8b949e; margin-bottom:8px;">
+                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:4px;">
+                        <span>Status:</span>
+                        <span id="gateway-status-badge" class="status-badge status-disconnected" style="font-size:10px;">--</span>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <span>Account:</span>
+                        <span id="gateway-account-name" style="color:#c9d1d9;">--</span>
+                    </div>
+                </div>
+                <div id="gateway-account-row" style="margin-bottom:10px;">
+                    <label style="display:block; font-size:11px; color:#8b949e; margin-bottom:4px;">Select account</label>
+                    <select id="live-account-select" style="width:100%; padding:6px 8px; background:#0d1117; border:1px solid #21262d; border-radius:6px; color:#c9d1d9; font-size:12px;">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <p style="margin-top:8px; font-size:10px; color:#8b949e;"><a href="/brokers" class="live-hint-link">Manage connections on Brokers page</a></p>
+            </div>
+            
+            <!-- Quick order -->
+            <div class="card" id="order-panel">
+                <div class="card-title">Quick order</div>
+                <form id="order-form">
+                    <div class="form-group">
+                        <label>Symbol</label>
+                        <input type="text" name="symbol" id="order-symbol" list="quote-symbol-datalist" placeholder="e.g. HK.00700" value="HK.00700" autocomplete="off">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Qty</label>
+                            <input type="number" name="quantity" value="100" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Price (empty=market)</label>
+                            <input type="number" name="price" step="0.01" placeholder="Market">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <button type="button" class="btn btn-primary" style="flex:1" onclick="placeOrder('buy')">Buy</button>
+                        <button type="button" class="btn btn-danger" style="flex:1" onclick="placeOrder('sell')">Sell</button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Log -->
+            <div class="card">
+                <div class="card-title">
+                    <span>Log</span>
+                    <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" onclick="clearLog()">Clear</button>
+                </div>
+                <div id="log" class="log-box"></div>
+            </div>
+        </div>
+        
+        <div class="main">
+            <!-- Account -->
+            <div class="card" id="account-panel">
+                <div class="card-title">
+                    <span>Account</span>
+                    <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="refreshAccount()">Refresh</button>
+                </div>
+                <div class="grid">
+                    <div class="metric">
+                        <div class="metric-label">Total assets</div>
+                        <div class="metric-value" id="total-assets">--</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Cash</div>
+                        <div class="metric-value" id="cash">--</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Market value</div>
+                        <div class="metric-value" id="market-value">--</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Power</div>
+                        <div class="metric-value" id="power">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quote -->
+            <div class="card">
+                <div class="card-title">Quote (auto-routed)</div>
+                <div class="form-row" style="margin-bottom: 15px;">
+                    <input type="text" id="quote-symbol" list="quote-symbol-datalist" placeholder="HK.00700 or AAPL" style="flex:1; padding:8px; border:1px solid #333; border-radius:4px; background:#1a1a2e; color:#eee;" autocomplete="off">
+                    <datalist id="quote-symbol-datalist"></datalist>
+                    <button class="btn btn-primary" onclick="getQuote()">Quote</button>
+                </div>
+                <div id="quote-result" class="quote-box hidden">
+                    <div class="quote-symbol" id="q-symbol">--</div>
+                    <div class="quote-price" id="q-price">--</div>
+                    <div class="quote-change" id="q-change">--</div>
+                    <div class="quote-info">
+                        <span>O: <span id="q-open">--</span></span>
+                        <span>H: <span id="q-high">--</span></span>
+                        <span>L: <span id="q-low">--</span></span>
+                        <span>Vol: <span id="q-volume">--</span></span>
+                        <span>Src: <span id="q-source">--</span></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Positions -->
+            <div class="card">
+                <div class="card-title">
+                    <span>Positions</span>
+                    <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="refreshPositions()">Refresh</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Name</th>
+                            <th>Qty</th>
+                            <th>Cost</th>
+                            <th>Price</th>
+                            <th>PnL</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positions-table">
+                        <tr><td colspan="7" style="text-align:center;color:#666;">Disconnected</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Orders -->
+            <div class="card">
+                <div class="card-title">
+                    <span>Today's orders</span>
+                    <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="refreshOrders()">Refresh</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Qty</th>
+                            <th>Price</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orders-table">
+                        <tr><td colspan="7" style="text-align:center;color:#666;">Disconnected</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/common.js"></script>
+    <script src="/static/js/live.js"></script>
+</body>
+</html>

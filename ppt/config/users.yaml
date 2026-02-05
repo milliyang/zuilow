@@ -1,0 +1,21 @@
+# ============================================================
+# 用户配置
+# ============================================================
+# 角色:
+#   - admin: 完整权限 (交易、账户管理、行情监控、测试页面)
+#   - viewer: 只读权限 (查看、导出)
+#
+# 密码生成:
+#   python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your_password'))"
+# ============================================================
+
+users:
+  leo:
+    password: "pbkdf2:sha256:260000$4WswiJJqXu9w8f8V$9011ec3c4851c74bc882a14dabb8c4789b899ff922bdf172149efdd8bcba1a0d"
+    role: admin
+    # 默认密码: admin123 (请修改!)
+  
+  ppt:
+    password: "pbkdf2:sha256:260000$Hotp9N1ynS6owaHL$5b016a9e996e009cd3085a192c113f65d00e627112594d7ee77fc0242cda02d7"
+    role: viewer
+    # 默认密码: admin123 (请修改!)

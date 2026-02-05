@@ -1,0 +1,9 @@
+# Rebalance after close: output target_weights once per run (e.g. 16:30).
+# Signals are executed at next market open (exec_US_open).
+strategy: RebalanceAfterClose
+description: Rebalance at close; exec at next open
+
+params:
+  target_weights:
+    US.AAPL: 0.5
+    US.TSLA: 0.5

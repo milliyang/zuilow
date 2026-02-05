@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Database cylinder - clean and precise -->
+  
+  <!-- Top ellipse -->
+  <ellipse cx="12" cy="5" rx="9" ry="2.5"/>
+  
+  <!-- Cylinder sides -->
+  <line x1="3" y1="5" x2="3" y2="19"/>
+  <line x1="21" y1="5" x2="21" y2="19"/>
+  
+  <!-- Bottom ellipse -->
+  <ellipse cx="12" cy="19" rx="9" ry="2.5"/>
+  
+  <!-- Data layers - thinner -->
+  <line x1="5" y1="9" x2="19" y2="9" stroke-width="0.8"/>
+  <line x1="5" y1="13" x2="19" y2="13" stroke-width="0.8"/>
+  <line x1="5" y1="17" x2="19" y2="17" stroke-width="0.8"/>
+</svg>

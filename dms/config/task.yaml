@@ -1,0 +1,59 @@
+# Maintenance Tasks Configuration
+# Task types: incremental, full_sync, validation, repair
+# Trigger types: cron, interval
+# Cron format: "分 时 日 月 星期" (e.g., "30 16 * * 1-5" = Mon-Fri 16:30)
+# Symbols loading:
+#   - symbols_file: Load from a single file (string) or multiple files (list)
+#     Examples:
+#       symbols_file: symbols/us.yaml                    # Single file
+#       symbols_file: [symbols/us.yaml, symbols/hk.yaml]  # Multiple files
+#   - symbols_dir: Scan all YAML files in the directory and merge symbols (e.g., "symbols")
+
+tasks:
+  # Incremental update task (daily update after market close)
+  - name: daily_update_us
+    type: incremental
+    fetcher: yfinance
+    symbols_file:
+      - symbols/us.yaml
+      - symbols/others.yaml
+    interval: 1d
+    initial_days: 1825        # First fetch history range (days, 5 years). Default: 1825
+    notes:
+      - "US market close + 3h (yfinance delay)"
+    trigger: cron
+    cron: "0 0 * * 2-6"       # Tue-Sat 00:00 UTC = Mon-Fri US close (21:00 UTC) + 3h
+    sync_backups: true
+  
+  # Hong Kong stock market update (daily update after market close)
+  - name: daily_update_hk
+    type: incremental
+    fetcher: yfinance
+    symbols_file:
+      - symbols/hk.yaml
+    interval: 1d
+    initial_days: 1825        # First fetch history range (days, 5 years). Default: 1825
+    notes:
+      - "HK market close + 3h (yfinance delay)"
+    trigger: cron
+    cron: "0 11 * * 1-5"      # Monday to Friday 11:00 UTC (HK close 08:00 UTC + 3h = 16:00 HKT)
+    sync_backups: true
+  
+  # Example: Load symbols from all files in symbols/ directory
+  # - name: daily_update_all
+  #   type: incremental
+  #   fetcher: yfinance
+  #   symbols_dir: symbols  # Scan all YAML files in symbols/ directory and merge (duplicates removed)
+  #   interval: 1d
+  #   trigger: cron
+  #   cron: "30 16 * * 1-5"
+  #   sync_backups: true
+  
+  # Data validation task (weekly check)
+  - name: data_validation
+    type: validation
+    symbols_dir: symbols      # Load all symbols from symbols/ directory
+    interval: 1d
+    trigger: cron
+    cron: "0 2 * * 6"         # Saturday 02:00 UTC
+    check_range: 30           # Check last 30 days

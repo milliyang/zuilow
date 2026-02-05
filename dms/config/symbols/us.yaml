@@ -1,0 +1,129 @@
+# US Stock Symbols
+# List of symbols to maintain
+
+symbols:
+  - US.QQQ     # 纳斯达克100指数ETF
+  - US.SPY     # 标普500指数ETF
+  - US.AAPL    # Apple Inc.
+  - US.MSFT    # Microsoft Corporation
+  - US.GOOGL   # Alphabet Inc. (Class A)
+  - US.TSLA    # Tesla, Inc.
+  - US.AMZN    # Amazon.com, Inc.
+  - US.ADBE    # Adobe
+  - US.CPRT    # 科帕特
+  - US.AMD     # 美国超微公司
+  - US.AON     # 安盛
+  - US.PG      # 宝洁
+  - US.AXP     # 美国运通
+  - US.AVGO    # 博通
+  - US.TSM     # 台积电
+  - US.OXY     # 西方石油
+  - US.MNST    # 怪物饮料
+  - US.V       # 维萨
+  - US.SHEL    # 壳牌
+  - US.BAC     # 美国银行
+  - US.CAT     # 卡特彼勒
+  - US.QCOM    # 高通
+  - US.COF     # 第一资本金融公司
+  - US.C       # 花旗集团
+  - US.CVX     # 雪佛龙
+  - US.DG      # 达乐
+  - US.FUTU    # 富途控股
+  - US.GM      # 通用汽车
+  - US.HD      # 家得宝
+  - US.COIN    # 币安CoinBase
+  - US.INTC    # 英特尔
+  - US.XOM     # 埃克森美孚
+  - US.KR      # 克罗格
+  - US.MCO     # 穆迪
+  - US.UPS     # 联合包裹
+  - US.USB     # 美国联合银行
+  - US.F       # 福特
+  - US.STX     # 希捷科技
+  - US.MCHP    # 微芯科技
+  - US.ASML    # 阿斯麦
+  - US.AMAT    # 应用材料
+  - US.MU      # 美光科技
+  - US.Z       # Zillow-C
+  - US.MELI    # MercadoLibre
+  - US.ADP     # 自动数据处理
+  - US.AAL     # 美国航空
+  - US.CRWD    # CrowdStrike
+  - US.MNDY    # monday.com
+  - US.FOXA    # 福克斯公司-A
+  - US.IBKR    # 盈透证券
+  - US.FCNCA   # 第一公民银行股份
+  - US.CASY    # Caseys General Stores
+  - US.RPRX    # Royalty Pharma
+  - US.LBRDA   # Liberty Broadband-A
+  - US.CME     # 芝加哥商品交易所
+  - US.TROW    # 普信集团
+  - US.EXC     # 爱克斯龙电力
+  - US.AZN     # 阿斯利康
+  - US.USD     # USD
+  - US.LTL     # LTL
+  - US.FLEX    # 伟创力
+  - US.MFC     # MFC
+  - US.GEHC    # GE HealthCare Technologies
+  - US.LIN     # 林德气体
+  - US.ZBRA    # 斑马技术
+  - US.WDAY    # Workday
+  - US.PANW    # Palo Alto Networks
+  - US.LRCX    # 泛林集团
+  - US.AFRM    # Affirm Holdings
+  - US.MAR     # 万豪酒店
+  - US.NDAQ    # 纳斯达克
+  - US.ORLY    # 奥莱利
+  - US.KDP     # Keurig Dr Pepper
+  - US.ROP     # 儒博实业
+  - US.WDC     # 西部数据
+  - US.HAS     # 孩之宝
+  - US.JKHY    # 杰克亨利
+  - US.ERIC    # 爱立信
+  - US.APP     # Applovin
+  - US.ARCC    # 阿瑞斯
+  - US.ARGX    # argenx SE
+  - US.BJ      # BJ Holdings
+  - US.BILI    # 哔哩哔哩
+  - US.CB      # 安达保险
+  - US.CBOE    # 芝加哥期权交易所
+  - US.COO     # 库珀医疗
+  - US.COST    # 开市客
+  - US.CSCO    # 思科
+  - US.DOCU    # DocuSign
+  - US.DHI     # 霍顿房屋
+  - US.DVA     # 德维特医疗
+  - US.FTAI    # FTAI Aviation
+  - US.GOOG    # 谷歌
+  - US.HOOD    # Robinhood
+  - US.JD      # 京东
+  - US.KHC     # 亨夫亨氏
+  - US.LEN     # 莱纳建筑
+  - US.LI      # 理想汽车
+  - US.LULU    # Lululemon
+  - US.MDLZ    # 蒙德利兹国际
+  - US.META    # Meta Platforms
+  - US.MRVL    # 迈威尔科技
+  - US.MSTR    # MicroStrategy
+  - US.NFLX    # 奈飞
+  - US.NVDA    # 英伟达
+  - US.NVR     # NVR
+  - US.NTES    # 网易
+  - US.PLTR    # Palantir
+  - US.RDDT    # Reddit
+  - US.REGN    # 再生元制药公司
+  - US.SAIC    # Science Applications Internationl
+  - US.SMCI    # 超微电脑
+  - US.SOUN    # SoundHound AI
+  - US.SNPS    # 新思科技
+  - US.TER     # 泰瑞达
+  - US.TME     # 腾讯音乐
+  - US.TMUS    # T-Mobile
+  - US.TXN     # 德州仪器
+  - US.ULTA    # Ulta美容
+  - US.VRSN    # Verisign
+  - US.WIX     # Wix.com
+  - US.WYNN    # 永利度假村
+  - US.ARM     # Arm Holdings
+  - US.MSI     # 摩托罗拉
+  - US.JPM     # JPMorgan Chase & Co.

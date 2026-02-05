@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZuiLow - Status</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/icon-monitor.svg">
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-dot.connected { background: #3fb950; box-shadow: 0 0 8px rgba(63,185,80,0.5); }
+        .status-dot.disconnected { background: #484f58; }
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #f0f6fc;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-title .badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #21262d;
+            color: #8b949e;
+        }
+        .test-btn { padding: 4px 10px; font-size: 12px; }
+        .test-result { font-size: 11px; margin-left: 8px; }
+        .test-result.ok { color: #3fb950; }
+        .test-result.err { color: #f85149; }
+        .url-hint { font-size: 11px; color: #8b949e; margin-bottom: 8px; }
+        .main-content table th:last-child, .main-content table td:last-child { min-width: 5em; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><img src="/static/img/icon-monitor.svg" alt="" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;">ZuiLow</h1>
+        <nav class="nav">
+            <a href="/">Account</a>
+            <a href="/backtest">Backtest</a>
+            <a href="/scheduler">Scheduler</a>
+            <a href="/signals">Signals</a>
+            <a href="/strategies">Strategies</a>
+            <a href="/live">Live</a>
+            <a href="/brokers">Brokers</a>
+            <a href="/status" class="active">Status</a>
+            <a href="#" class="nav-logout" onclick="logout(); return false;">Log out</a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <!-- Data sources -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card-title">
+                <span class="section-title">Data sources <span class="badge" id="ds-count">0</span></span>
+                <button class="btn btn-secondary test-btn" onclick="refreshDatasources()">Refresh</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody id="datasources"></tbody>
+            </table>
+        </div>
+
+        <!-- Brokers (Futu, PPT, IBKR) -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card-title">
+                <span class="section-title">Brokers <span class="badge" id="broker-count">0</span></span>
+                <button class="btn btn-secondary test-btn" onclick="refreshBrokers()">Refresh</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Broker</th>
+                        <th>Status</th>
+                        <th>Config</th>
+                    </tr>
+                </thead>
+                <tbody id="brokers"></tbody>
+            </table>
+        </div>
+
+        <!-- Paper trade (PPT) -->
+        <div class="card">
+            <div class="card-title">
+                <span class="section-title">Paper trade (PPT)</span>
+                <div>
+                    <span id="ppt-status" class="status-dot disconnected"></span>
+                    <span id="ppt-status-text" style="font-size:12px;color:#8b949e;margin-right:10px;">Disconnected</span>
+                    <button class="btn btn-primary test-btn" onclick="testPaperConnection()">Test</button>
+                    <button class="btn btn-secondary test-btn" onclick="refreshAccounts()">Refresh</button>
+                </div>
+            </div>
+            <div class="url-hint" id="paper-url-hint">--</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Account</th>
+                        <th>Equity</th>
+                        <th>PnL</th>
+                        <th>Action</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody id="accounts"></tbody>
+            </table>
+        </div>
+
+        <div id="status-msg" style="font-size:11px;color:#8b949e;margin-top:16px;"></div>
+    </div>
+
+    <script src="/static/js/common.js"></script>
+    <script>
+        async function apiRequest(url, options = {}) {
+            const merged = { headers: { 'Content-Type': 'application/json' }, ...options };
+            if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData))
+                merged.body = JSON.stringify(options.body);
+            const res = await fetch(url, merged);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || data.detail || 'Request failed');
+            return data;
+        }
+
+        function formatMoney(v) {
+            if (v == null) return '--';
+            return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // ---------- Data sources ----------
+        async function refreshDatasources() {
+            const tbody = document.getElementById('datasources');
+            const countEl = document.getElementById('ds-count');
+            try {
+                const data = await apiRequest('/api/system/datasources');
+                const sources = data.sources || [];
+                countEl.textContent = sources.length;
+                tbody.innerHTML = sources.map(s => `
+                    <tr>
+                        <td>${s.name}</td>
+                        <td>${s.type || '--'}</td>
+                        <td>
+                            <span class="status-dot ${s.connected ? 'connected' : 'disconnected'}"></span>
+                            ${s.connected ? 'Connected' : 'Disconnected'}
+                        </td>
+                        <td><button class="btn btn-secondary test-btn" onclick="testDatasource('${s.name}')">Test</button></td>
+                        <td><span id="ds-result-${s.name}" class="test-result">--</span></td>
+                    </tr>
+                `).join('') || '<tr><td colspan="5">No sources</td></tr>';
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="5">Error: ' + e.message + '</td></tr>';
+                countEl.textContent = '0';
+            }
+        }
+
+        async function testDatasource(name) {
+            const el = document.getElementById('ds-result-' + name);
+            if (el) el.textContent = '...';
+            try {
+                const data = await apiRequest('/api/system/datasources/' + encodeURIComponent(name) + '/test', {
+                    method: 'POST',
+                    body: { symbol: 'SPY', days: 5 }
+                });
+                if (data.ok) {
+                    el.textContent = 'OK: ' + data.rows + ' rows';
+                    el.className = 'test-result ok';
+                } else {
+                    el.textContent = data.error || 'Failed';
+                    el.className = 'test-result err';
+                }
+            } catch (e) {
+                el.textContent = e.message;
+                el.className = 'test-result err';
+            }
+        }
+
+        // ---------- Paper accounts ----------
+        async function refreshAccounts() {
+            const tbody = document.getElementById('accounts');
+            const statusDot = document.getElementById('ppt-status');
+            const statusText = document.getElementById('ppt-status-text');
+            const urlHint = document.getElementById('paper-url-hint');
+            try {
+                const data = await apiRequest('/api/system/accounts');
+                urlHint.textContent = 'URL: ' + (data.paper_trade_url || '--');
+                if (data.connected) {
+                    statusDot.className = 'status-dot connected';
+                    statusText.textContent = 'Connected';
+                } else {
+                    statusDot.className = 'status-dot disconnected';
+                    statusText.textContent = 'Disconnected';
+                }
+                const accounts = data.accounts || [];
+                tbody.innerHTML = accounts.map(a => `
+                    <tr>
+                        <td>${a.name}</td>
+                        <td>${formatMoney(a.total_value)}</td>
+                        <td>${formatMoney(a.pnl)} (${a.pnl_pct != null ? a.pnl_pct.toFixed(2) : '--'}%)</td>
+                        <td><button class="btn btn-secondary test-btn" onclick="testAccount('${a.name}')">Test</button></td>
+                        <td><span id="acc-result-${a.name.replace(/[^a-zA-Z0-9_-]/g, '_')}" class="test-result">--</span></td>
+                    </tr>
+                `).join('') || '<tr><td colspan="5">No accounts or PPT disconnected</td></tr>';
+            } catch (e) {
+                statusDot.className = 'status-dot disconnected';
+                statusText.textContent = 'Disconnected';
+                urlHint.textContent = 'URL: --';
+                tbody.innerHTML = '<tr><td colspan="5">Error: ' + e.message + '</td></tr>';
+            }
+        }
+
+        async function testPaperConnection() {
+            const msg = document.getElementById('status-msg');
+            msg.textContent = 'Testing PPT...';
+            try {
+                const data = await apiRequest('/api/system/accounts/test', { method: 'POST' });
+                msg.textContent = data.message || 'OK';
+                msg.style.color = '#3fb950';
+                refreshAccounts();
+            } catch (e) {
+                msg.textContent = 'Failed: ' + e.message;
+                msg.style.color = '#f85149';
+            }
+        }
+
+        async function testAccount(name) {
+            const safeId = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const el = document.getElementById('acc-result-' + safeId);
+            if (el) el.textContent = '...';
+            try {
+                const data = await apiRequest('/api/system/accounts/' + encodeURIComponent(name) + '/test', { method: 'POST' });
+                if (data.ok) {
+                    el.textContent = 'OK';
+                    el.className = 'test-result ok';
+                } else {
+                    el.textContent = data.error || 'Failed';
+                    el.className = 'test-result err';
+                }
+            } catch (e) {
+                el.textContent = e.message;
+                el.className = 'test-result err';
+            }
+        }
+
+        // ---------- Brokers (Futu, PPT, IBKR) ----------
+        async function refreshBrokers() {
+            const tbody = document.getElementById('brokers');
+            const countEl = document.getElementById('broker-count');
+            const rows = [];
+            try {
+                const [futu, ppt, ibkr] = await Promise.all([
+                    fetch('/api/futu/status').then(r => r.json()).catch(() => ({ connected: false, config: {} })),
+                    fetch('/api/brokers/ppt/status').then(r => r.json()).catch(() => ({ connected: false, base_url: null, dms_base_url: null })),
+                    fetch('/api/ibkr/status').then(r => r.json()).catch(() => ({ connected: false, config: {} }))
+                ]);
+                const futuCfg = futu.config || {};
+                const futuConfigText = futu.connected
+                    ? [futuCfg.host + ':' + (futuCfg.port || ''), futuCfg.market, futuCfg.env, futu.acc_id ? 'acc: ' + futu.acc_id : ''].filter(Boolean).join(' · ')
+                    : (futuCfg.host && futuCfg.port ? futuCfg.host + ':' + futuCfg.port : '--');
+                const pptConfigText = ppt.base_url
+                    ? (ppt.dms_base_url ? ppt.base_url + ' · DMS: ' + ppt.dms_base_url : ppt.base_url)
+                    : '--';
+                const ibkrCfg = ibkr.config || {};
+                const ibkrConfigText = ibkr.connected
+                    ? [ibkrCfg.host + ':' + (ibkrCfg.port || ''), ibkrCfg.account ? 'acc: ' + ibkrCfg.account : ''].filter(Boolean).join(' · ')
+                    : (ibkrCfg.host && ibkrCfg.port ? ibkrCfg.host + ':' + ibkrCfg.port : '--');
+                rows.push({ name: 'Futu', connected: futu.connected, config: futuConfigText });
+                rows.push({ name: 'PPT', connected: ppt.connected, config: pptConfigText });
+                rows.push({ name: 'IBKR', connected: ibkr.connected, config: ibkrConfigText });
+                countEl.textContent = rows.length;
+                tbody.innerHTML = rows.map(r => `
+                    <tr>
+                        <td>${r.name}</td>
+                        <td>
+                            <span class="status-dot ${r.connected ? 'connected' : 'disconnected'}"></span>
+                            ${r.connected ? 'Connected' : 'Disconnected'}
+                        </td>
+                        <td style="font-size:12px;color:#8b949e;">${r.config || '--'}</td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="3">Error: ' + e.message + '</td></tr>';
+                countEl.textContent = '0';
+            }
+        }
+
+        // Init
+        refreshDatasources();
+        refreshBrokers();
+        refreshAccounts();
+        refreshFooterTime('status-msg');
+    </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# US ETF Symbols
+# List of symbols to maintain
+symbols:
+  - US.QQQ     # 纳斯达克100指数ETF
+  - US.SPY     # 标普500指数ETF
+  - US.IWM     # 罗素2000指数ETF
+  - US.GLD     # 黄金ETF
+  - US.USO     # 原油ETF
+  - US.SLV     # 白银ETF
+  # - US.TLT     # 长期国债ETF
+  # - US.XLK     # 科技板块ETF
+  # - US.XLF     # 金融板块ETF
+  # - US.XLE     # 能源板块ETF
+  # - US.XLV     # 医疗保健板块ETF
+  # - US.XLY     # 消费非必需品板块ETF
+  # - US.XLP     # 消费必需品板块ETF
+  # - US.XLI     # 工业板块ETF
+  # - US.XLB     # 原材料板块ETF
+  # - US.XLU     # 公用事业板块ETF
+  # - US.XLRE    # 房地产板块ETF
+  # - US.VNQ     # 房地产ETF（Vanguard）
+  # - US.VTI     # 美国全市场ETF
+  # - US.EEM     # 新兴市场ETF
+  # - US.EFA     # 发达市场（非美）ETF
+  # - US.AGG     # 美国核心债券ETF
+  # - US.LQD     # 投资级公司债ETF
+  # - US.HYG     # 高收益债券ETF
+  # - US.DBC     # 商品ETF

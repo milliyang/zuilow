@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DMS - Data Maintenance Service</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon-database.svg">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="header">
+        <h1 style="display: flex; align-items: center; gap: 8px;">
+            <img src="/static/icon-database.svg" alt="Database" style="width: 24px; height: 24px; vertical-align: middle;">
+            DMS - Data Maintenance Service
+        </h1>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span id="nodes-summary" style="color: #8b949e; font-size: 12px;">(Loading...)</span>
+            <span id="user-info" style="color: #8b949e; font-size: 12px;"></span>
+            <a href="#" id="nav-logout" style="color: #58a6ff; font-size: 12px; text-decoration: none;">Log out</a>
+        </div>
+    </div>
+
+    <div class="grid">
+        <!-- Node Status -->
+        <div class="card">
+            <h2>Node Status</h2>
+            <div id="nodes-container">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Master Panel (Master only) -->
+        <div id="master-panel" class="card hidden">
+            <h2>Master Node</h2>
+            <div id="master-panel-sync">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Slave Panel (Slave only) -->
+        <div id="slave-panel" class="card hidden">
+            <h2>Slave Node</h2>
+            <div class="empty-state">Slave Mode</div>
+        </div>
+
+        <!-- Sync Status -->
+        <div class="card">
+            <h2>Sync Status</h2>
+            <div id="sync-status-container">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Sync History -->
+        <div class="card">
+            <h2>Sync History</h2>
+            <div id="sync-history-container">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Maintenance Tasks -->
+        <div class="card" style="grid-column: span 2;">
+            <h2>Maintenance Tasks</h2>
+            <div style="margin-bottom: 12px;">
+                <button id="btn-trigger-all" class="btn btn-primary" style="margin-right: 8px;">🚀 Trigger All Tasks</button>
+            </div>
+            <div id="tasks-container">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Database Info Query -->
+        <div class="card" style="grid-column: span 2;">
+            <h2>Database Info Query</h2>
+            <div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <input type="text" id="symbol-query-input" placeholder="Enter symbol (e.g., US.AAPL)" 
+                       style="flex: 1; min-width: 200px; padding: 8px; background: #0d1117; border: 1px solid #21262d; border-radius: 4px; color: #c9d1d9; font-size: 12px;">
+                <select id="symbol-query-interval" 
+                        style="padding: 8px; background: #0d1117; border: 1px solid #21262d; border-radius: 4px; color: #c9d1d9; font-size: 12px;">
+                    <option value="1d">Daily (1d)</option>
+                    <option value="1h">Hourly (1h)</option>
+                    <option value="1m">Minute (1m)</option>
+                </select>
+                <button class="btn btn-primary" onclick="querySymbolInfo()">🔍 Query</button>
+                <button class="btn btn-secondary" onclick="queryAllSymbols()" id="btn-all-symbols">📋 All Symbols</button>
+            </div>
+            <div id="symbol-info-container">
+                <div class="empty-state">Enter a symbol and click Query to check database information</div>
+            </div>
+        </div>
+
+        <!-- Data Export -->
+        <div class="card" style="grid-column: span 2;">
+            <h2>Data Export</h2>
+            <div style="margin-bottom: 12px;">
+                <button class="btn btn-primary" onclick="showExportDialog()" style="margin-right: 8px;">📦 Export Data</button>
+                <button class="btn btn-secondary" onclick="refreshExportsList()" style="margin-right: 8px;">🔄 Refresh List</button>
+                <button class="btn" onclick="showClearDatabaseDialog()" style="background: #da3633; color: #fff; margin-right: 8px;">🗑️ Clear Database</button>
+            </div>
+            <div id="exports-list-container">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="footer-time" class="footer-time"></div>
+
+    <!-- Export Dialog -->
+    <div id="export-dialog" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 20px; max-width: 500px; width: 90%;">
+            <h2 style="color: #f0f6fc; margin-bottom: 16px;">Export Data</h2>
+            
+            <div style="margin-bottom: 12px;">
+                <label style="display: flex; align-items: center; color: #c9d1d9; font-size: 12px; cursor: pointer; margin-bottom: 8px;">
+                    <input type="checkbox" id="export-all-symbols" style="margin-right: 8px;">
+                    Export All Symbols
+                </label>
+            </div>
+            
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #8b949e; font-size: 12px; margin-bottom: 4px;">Stock Symbols (comma-separated)</label>
+                <input type="text" id="export-symbols" placeholder="US.AAPL, US.TSLA, US.MSFT" 
+                       style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #21262d; border-radius: 4px; color: #c9d1d9; font-size: 12px;">
+            </div>
+            
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #8b949e; font-size: 12px; margin-bottom: 4px;">Time Interval</label>
+                <select id="export-interval" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #21262d; border-radius: 4px; color: #c9d1d9; font-size: 12px;">
+                    <option value="1d">Daily (1d)</option>
+                    <option value="1h">Hourly (1h)</option>
+                    <option value="1m">Minute (1m)</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 16px;">
+                <label style="display: flex; align-items: center; color: #c9d1d9; font-size: 12px; cursor: pointer;">
+                    <input type="checkbox" id="export-create-zip" checked style="margin-right: 8px;">
+                    Create ZIP Archive
+                </label>
+            </div>
+            
+            <div id="export-progress" style="display: none; margin-bottom: 12px;"></div>
+            
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="closeExportDialog()">Cancel</button>
+                <button class="btn btn-primary" onclick="startExport()">Start Export</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clear Database Dialog -->
+    <div id="clear-database-dialog" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: #161b22; border: 1px solid #da3633; border-radius: 6px; padding: 20px; max-width: 500px; width: 90%;">
+            <h2 style="color: #f85149; margin-bottom: 16px;">⚠️ Clear Database</h2>
+            
+            <div style="margin-bottom: 16px; color: #c9d1d9; font-size: 13px; line-height: 1.6;">
+                <p style="margin-bottom: 12px;">This operation will <strong style="color: #f85149;">permanently delete</strong> all data in the database!</p>
+                <p style="margin-bottom: 12px;">⚠️ <strong>Warning:</strong></p>
+                <ul style="margin-left: 20px; margin-bottom: 12px;">
+                    <li>All historical stock data will be deleted</li>
+                    <li>This operation <strong style="color: #f85149;">cannot be undone</strong></li>
+                    <li>Only master node can perform this operation</li>
+                </ul>
+            </div>
+            
+            <div style="margin-bottom: 16px;">
+                <label style="display: flex; align-items: center; color: #c9d1d9; font-size: 12px; cursor: pointer;">
+                    <input type="checkbox" id="clear-database-confirm-check" style="margin-right: 8px;">
+                    <span>I understand the risks and confirm to clear the database</span>
+                </label>
+            </div>
+            
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="closeClearDatabaseDialog()">Cancel</button>
+                <button id="clear-database-confirm-btn" class="btn" onclick="confirmClearDatabase()" 
+                        style="background: #da3633; color: #fff;" disabled>Confirm Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            fetch('/api/user', { credentials: 'include' })
+                .then(r => r.json())
+                .then(data => {
+                    var el = document.getElementById('user-info');
+                    if (el && data.authenticated) el.textContent = data.username || '';
+                })
+                .catch(function() {});
+            document.getElementById('nav-logout').addEventListener('click', function(e) {
+                e.preventDefault();
+                fetch('/api/logout', { method: 'POST', credentials: 'include' })
+                    .then(function() { window.location.href = '/login'; });
+            });
+        })();
+    </script>
+    <script src="/static/js/dms.js"></script>
+</body>
+</html>

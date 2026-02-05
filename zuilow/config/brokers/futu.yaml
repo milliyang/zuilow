@@ -1,0 +1,10 @@
+# Futu OpenD connection
+
+futu:
+  host: "127.0.0.1"
+  # host: "10.147.17.83"
+  port: 11111
+  unlock_password: ""
+  acc_id: null
+  # rsa_file: "/home/leo/work/quant/sai/broker/futu/public.pem"
+  rsa_file: ""

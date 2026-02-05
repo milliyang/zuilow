@@ -1,0 +1,16 @@
+# Build from repo root (context ${REPO_ROOT}) so stime/ is available.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY stime/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY stime/ ./
+
+EXPOSE 11185
+
+CMD ["python", "app.py"]

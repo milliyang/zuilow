@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZuiLow - Trading Signals</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/icon-monitor.svg">
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .filters { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .filters label { font-size: 12px; color: #8b949e; }
+        .filters select, .filters input[type=date] { padding: 6px 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; }
+        .pagination { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: #8b949e; }
+        .pagination button { padding: 6px 12px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; cursor: pointer; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .signals-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .signals-table th, .signals-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #21262d; }
+        .signals-table th { color: #8b949e; font-weight: 600; }
+        .signals-table td { color: #c9d1d9; }
+        .status-pending { color: #d29922; }
+        .status-executed { color: #3fb950; }
+        .status-failed { color: #f85149; }
+        .status-cancelled { color: #8b949e; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><img src="/static/img/icon-monitor.svg" alt="" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;">ZuiLow</h1>
+        <nav class="nav">
+            <a href="/">Account</a>
+            <a href="/backtest">Backtest</a>
+            <a href="/scheduler">Scheduler</a>
+            <a href="/signals" class="active">Signals</a>
+            <a href="/strategies">Strategies</a>
+            <a href="/live">Live</a>
+            <a href="/brokers">Brokers</a>
+            <a href="/status">Status</a>
+            <a href="#" class="nav-logout" onclick="logout(); return false;">Log out</a>
+        </nav>
+    </div>
+    <div class="main-content">
+        <div class="card">
+            <div class="card-title">Trading Signals</div>
+            <div class="filters">
+                <label>Account</label>
+                <select id="filter-account"><option value="">All</option></select>
+                <label>Market</label>
+                <select id="filter-market">
+                    <option value="">All</option>
+                    <option value="HK">HK</option>
+                    <option value="US">US</option>
+                </select>
+                <label>Status</label>
+                <select id="filter-status">
+                    <option value="">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="executed">Executed</option>
+                    <option value="failed">Failed</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+                <label>Kind</label>
+                <select id="filter-kind">
+                    <option value="">All</option>
+                    <option value="order">Order</option>
+                    <option value="rebalance">Rebalance</option>
+                </select>
+                <label>Date from</label>
+                <input type="date" id="filter-date-from" title="Optional start date (YYYY-MM-DD)">
+                <label>Date to</label>
+                <input type="date" id="filter-date-to" title="Optional end date (YYYY-MM-DD)">
+                <label>Per page</label>
+                <select id="filter-limit">
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <button class="btn btn-secondary" onclick="goPage(1); loadSignals();">Query</button>
+            </div>
+            <div class="pagination" id="pagination-bar" style="display:none;">
+                <button type="button" id="btn-prev" onclick="prevPage()">Prev</button>
+                <span id="page-info">Page 1 of 1</span>
+                <button type="button" id="btn-next" onclick="nextPage()">Next</button>
+                <span id="total-info">Total: 0</span>
+            </div>
+            <table class="signals-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Job</th>
+                        <th>Account</th>
+                        <th>Market</th>
+                        <th>Kind</th>
+                        <th>Symbol</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="signals-tbody">
+                    <tr><td colspan="9">Loading...</td></tr>
+                </tbody>
+            </table>
+            <div id="footer-time" style="font-size:11px;color:#8b949e;margin-top:12px;"></div>
+        </div>
+    </div>
+    <script src="/static/js/common.js"></script>
+    <script>
+        async function apiRequest(path, options = {}) {
+            const res = await fetch(path, { credentials: 'include', ...options });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            return res.json();
+        }
+        let currentPage = 1;
+        function buildQuery(page) {
+            const account = document.getElementById('filter-account').value;
+            const market = document.getElementById('filter-market').value;
+            const status = document.getElementById('filter-status').value;
+            const kind = document.getElementById('filter-kind').value;
+            const dateFrom = document.getElementById('filter-date-from').value;
+            const dateTo = document.getElementById('filter-date-to').value;
+            const limit = document.getElementById('filter-limit').value;
+            const params = new URLSearchParams();
+            if (account) params.set('account', account);
+            if (market) params.set('market', market);
+            if (status) params.set('status', status);
+            if (kind) params.set('kind', kind);
+            if (dateFrom) params.set('date_from', dateFrom);
+            if (dateTo) params.set('date_to', dateTo);
+            params.set('page', String(page || 1));
+            params.set('limit', limit);
+            return '/api/signals?' + params.toString();
+        }
+        function goPage(p) { currentPage = Math.max(1, p); }
+        function prevPage() { goPage(currentPage - 1); loadSignals(); }
+        function nextPage() { goPage(currentPage + 1); loadSignals(); }
+        async function loadSignals() {
+            const tbody = document.getElementById('signals-tbody');
+            const bar = document.getElementById('pagination-bar');
+            try {
+                const data = await apiRequest(buildQuery(currentPage));
+                const list = data.signals || (Array.isArray(data) ? data : []);
+                const total = data.total != null ? data.total : list.length;
+                const page = data.page != null ? data.page : 1;
+                const limit = data.limit != null ? data.limit : 20;
+                currentPage = page;
+                const totalPages = Math.max(1, Math.ceil(total / limit));
+                tbody.innerHTML = list.map(s => {
+                    const statusClass = 'status-' + (s.status || '');
+                    const cancelBtn = s.status === 'pending' && s.id
+                        ? '<button class="btn btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="cancelSignal(' + s.id + ')">Cancel</button>'
+                        : '';
+                    return '<tr><td>' + (s.id || '') + '</td><td>' + (s.job_name || '') + '</td><td>' + (s.account || '') + '</td><td>' + (s.market || '') + '</td><td>' + (s.kind || '') + '</td><td>' + (s.symbol || '') + '</td><td class="' + statusClass + '">' + (s.status || '') + '</td><td>' + (s.created_at || '') + '</td><td>' + cancelBtn + '</td></tr>';
+                }).join('') || '<tr><td colspan="9">No signals</td></tr>';
+                bar.style.display = 'flex';
+                document.getElementById('page-info').textContent = 'Page ' + page + ' of ' + totalPages;
+                document.getElementById('total-info').textContent = 'Total: ' + total;
+                document.getElementById('btn-prev').disabled = page <= 1;
+                document.getElementById('btn-next').disabled = page >= totalPages;
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="9">Error: ' + e.message + '</td></tr>';
+                bar.style.display = 'none';
+            }
+        }
+        async function cancelSignal(id) {
+            try {
+                const res = await fetch('/api/signals/' + id + '/cancel', { method: 'POST', credentials: 'include' });
+                const data = await res.json();
+                if (data.ok) loadSignals();
+            } catch (e) { console.error(e); }
+        }
+        async function loadAccounts() {
+            try {
+                const list = await apiRequest('/api/accounts');
+                const sel = document.getElementById('filter-account');
+                sel.innerHTML = '<option value="">All</option>';
+                (list.accounts || list).forEach(a => {
+                    const name = a.name || a.account_name;
+                    if (name) sel.appendChild(new Option(name, name));
+                });
+            } catch (e) {}
+        }
+        loadAccounts().then(function() { goPage(1); loadSignals(); });
+        refreshFooterTime('footer-time');
+    </script>
+</body>
+</html>

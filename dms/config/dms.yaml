@@ -1,0 +1,77 @@
+# DMS Configuration
+# Modify according to your environment (database, fetchers, tasks, sync).
+
+dms:
+  # Service configuration
+  service:
+    host: "0.0.0.0"              # Service listen address
+    port: 11183                  # Service port (independent from zuilow)
+    log_level: "INFO"            # Log level: DEBUG, INFO, WARNING, ERROR
+    log_dir: "run/logs"         # Log directory
+    run_on_startup: false        # Run all incremental tasks once on startup (for initial data fetch)
+                                 # Set to true to automatically fetch data when service starts
+  
+  # Data fetcher configuration (external data sources)
+  fetchers:
+    yfinance:
+      enabled: true              # Enable YFinance data source
+      rate_limit: 0.5            # Request interval (seconds)
+      retry_times: 3             # Retry times on failure
+      cache_enabled: false       # DMS doesn't need cache, write directly to database
+      initial_days: 1825         # Default history range for first fetch (days, 5 years)
+    
+    futu:                       # Optional: Futu OpenD data source
+      enabled: false
+      host: "127.0.0.1"         # Futu OpenD host
+      port: 11111               # Futu OpenD port
+  
+  # Primary database configuration (write and read target)
+  primary:
+    type: influxdb1              # Database type
+    # For Docker Compose internal InfluxDB, use service name "influxdb"
+    # For external InfluxDB, use IP address or hostname
+    #host: "influxdb"             # Docker service name (when using docker-compose) or external IP
+    #host: "172.19.202.120"    # External InfluxDB IP (uncomment to use external DB)
+    host: one4090
+    port: 8086                   # Database port
+    database: "dms_data"         # Database name
+    username: ""                 # Username (empty if not required, set if INFLUXDB_HTTP_AUTH_ENABLED=true)
+    password: ""                 # Password (empty if not required, set if INFLUXDB_HTTP_AUTH_ENABLED=true)
+    servers: []                  # Multi-server mode (optional, for load balancing)
+  
+  # Reader optimization configuration (for backtesting scenarios)
+  reader:
+    cache_enabled: true          # Enable LRU cache
+    cache_size: 1000             # Cache entries count
+    cache_ttl: 3600              # Cache TTL (seconds)
+    batch_size: 300              # Batch read size
+    parallel_read: true          # Parallel read multiple symbols
+    max_workers: 5               # Parallel read threads
+  
+  # Backup nodes list (for data redundancy)
+  # Each backup node configuration:
+  #   - name: backup1
+  #     type: influxdb1
+  #     host: backup1.example.com
+  #     port: 8086
+  #     database: stock_data
+  #     enabled: true
+  backups: []
+  
+  # Master-Slave mode configuration
+  role: master                  # Node role: master or slave
+
+  debug_mode: false             # Debug mode: true or false
+  debug_symbol_limit: 10      # When debug_mode=true, limit to first N symbols per file (default: 10)
+                                # Each symbols file (us.yaml, hk.yaml, others.yaml) will only load first N symbols
+  
+  # Master node configuration (used when role=master)
+  # List all slave nodes that this master should manage
+  slaves: []
+  
+  # Slave node configuration (used when role=slave)
+  # Configure master node information
+  master:
+    host: master.example.com    # Master node host
+    port: 11183                 # Master node port
+    enabled: false              # Enable master connection

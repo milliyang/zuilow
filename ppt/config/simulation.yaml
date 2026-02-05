@@ -1,0 +1,101 @@
+# Paper Trade 交易模拟配置
+# 用于模拟真实市场的交易摩擦
+
+simulation:
+  use_preset: "futu_us"   # 使用美股预设
+  # 或者设为 null 使用下面的自定义配置
+
+  # ========== 滑点模拟 ==========
+  slippage:
+    enabled: true
+    mode: "percentage"    # percentage | fixed | random
+    value: 0.05           # percentage 模式: 0.05 = 0.05%
+                          # fixed 模式: 固定金额 (如 0.01)
+                          # random 模式: 随机范围上限 (实际为 0 ~ value)
+    
+    # 方向影响: 买入价格上浮，卖出价格下浮
+    # 最终价格 = 基准价 ± (基准价 × value%)
+  
+  # ========== 手续费模拟 ==========
+  commission:
+    enabled: true
+    mode: "percentage"    # percentage | fixed | tiered
+    
+    # percentage 模式
+    rate: 0.001           # 0.1% 手续费率
+    minimum: 1.0          # 最低手续费 $1
+    
+    # fixed 模式 (每笔固定)
+    per_trade: 5.0        # 每笔 $5
+    
+    # tiered 模式 (阶梯费率) - 按成交金额
+    # tiers:
+    #   - max_value: 10000    # 0 ~ 1万
+    #     rate: 0.003         # 0.3%
+    #   - max_value: 100000   # 1万 ~ 10万
+    #     rate: 0.002         # 0.2%
+    #   - max_value: null     # 10万以上
+    #     rate: 0.001         # 0.1%
+  
+  # ========== 部分成交模拟 ==========
+  partial_fill:
+    enabled: false        # 默认关闭，开启后大单可能分批成交
+    threshold: 10000      # 订单金额超过此值才可能部分成交
+    min_fill_rate: 0.3    # 最小成交比例 30%
+    max_fill_rate: 1.0    # 最大成交比例 100%
+  
+  # ========== 延迟模拟 ==========
+  latency:
+    enabled: false        # 默认关闭
+    min_ms: 50            # 最小延迟 50ms
+    max_ms: 200           # 最大延迟 200ms
+    # 注意: 延迟仅影响 API 响应时间，不影响价格
+
+# ========== 预设配置 ==========
+# 快速切换不同市场环境
+
+presets:
+  # 理想环境 (无摩擦)
+  ideal:
+    slippage: { enabled: false }
+    commission: { enabled: false }
+    partial_fill: { enabled: false }
+  
+  # 美股散户
+  us_retail:
+    slippage: { enabled: true, mode: "percentage", value: 0.02 }
+    commission: { enabled: false }  # 多数美股券商免佣
+    partial_fill: { enabled: false }
+  
+  # 港股
+  hk_stock:
+    slippage: { enabled: true, mode: "percentage", value: 0.05 }
+    commission: { enabled: true, mode: "percentage", rate: 0.001, minimum: 50 }
+    partial_fill: { enabled: false }
+  
+  # 高波动市场
+  volatile:
+    slippage: { enabled: true, mode: "random", value: 0.2 }
+    commission: { enabled: true, mode: "percentage", rate: 0.001, minimum: 1 }
+    partial_fill: { enabled: true, threshold: 5000, min_fill_rate: 0.5 }
+
+  # 富途牛牛港股 (HKD)
+  # 佣金 0.03% (min 3) + 平台费 15 + 印花税 0.1% + 交易费 0.005% + 征费 0.00565% + 结算费 0.002%
+  # 总计约 0.14% + 18 HKD
+  futu_hk:
+    slippage: { enabled: true, mode: "percentage", value: 0.02 }
+    commission: { enabled: true, mode: "percentage", rate: 0.0014, minimum: 18 }
+    partial_fill: { enabled: false }
+
+  # 富途牛牛美股 (USD)
+  # 佣金 $0.0049/股 或 0.03% (min $1) + 平台费 $1 + SEC 0.00278% (卖出)
+  # 总计约 0.005% + $2 (美股无印花税，费用远低于港股)
+  # 
+  # 以下是港股和美股的交易成本差异原因：(费率仅供参考)
+  # 港股有 0.1% 印花税（最大头）
+  # 美股无印花税，仅少量 SEC/TAF 费
+  # 美股交易成本约为港股的 1/10  (FxxK HongKong!!!, FxxK China!!!)
+  futu_us:
+    slippage: { enabled: true, mode: "percentage", value: 0.01 }
+    commission: { enabled: true, mode: "percentage", rate: 0.0005, minimum: 2 }
+    partial_fill: { enabled: false }

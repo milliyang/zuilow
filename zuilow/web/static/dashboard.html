@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZuiLow - Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/icon-monitor.svg">
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .account-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding: 10px 14px;
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 8px;
+        }
+        .account-bar .account-label {
+            font-size: 12px;
+            color: #8b949e;
+            white-space: nowrap;
+        }
+        .account-bar select {
+            padding: 6px 10px;
+            font-size: 13px;
+            min-width: 200px;
+            max-width: 320px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            cursor: pointer;
+        }
+        .account-bar select:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        .account-bar .btn-refresh {
+            margin-left: auto;
+            padding: 5px 12px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><img src="/static/img/icon-monitor.svg" alt="" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;">ZuiLow</h1>
+        <nav class="nav">
+            <a href="/" class="active">Account</a>
+            <a href="/backtest">Backtest</a>
+            <a href="/scheduler">Scheduler</a>
+            <a href="/signals">Signals</a>
+            <a href="/strategies">Strategies</a>
+            <a href="/live">Live</a>
+            <a href="/brokers">Brokers</a>
+            <a href="/status">Status</a>
+            <a href="#" class="nav-logout" onclick="logout(); return false;">Log out</a>
+        </nav>
+    </div>
+    
+    <div class="main-content">
+        <div class="account-bar">
+            <span class="account-label">Account</span>
+            <select id="account-select" onchange="onAccountChange()">
+                <option value="">Loading...</option>
+            </select>
+            <button type="button" class="btn btn-secondary btn-refresh" onclick="refresh()">Refresh</button>
+        </div>
+        <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+            <div class="card">
+                <div class="card-title">Equity</div>
+                <div class="card-value" id="equity">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Cash</div>
+                <div class="card-value" id="cash">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Market Value</div>
+                <div class="card-value" id="market_value">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">PnL</div>
+                <div class="card-value" id="pnl">--</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-title">Positions</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Qty</th>
+                        <th>Avg</th>
+                        <th>Price</th>
+                        <th>Value</th>
+                        <th>PnL</th>
+                    </tr>
+                </thead>
+                <tbody id="positions"></tbody>
+            </table>
+        </div>
+        
+        <div class="card">
+            <div class="card-title">Recent Trades</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody id="trades"></tbody>
+            </table>
+            <div class="pagination" id="trades-pagination" style="display:none; margin-top:10px;">
+                <button type="button" id="trades-prev" onclick="tradesPrev()">Prev</button>
+                <span id="trades-page-info">Page 1 of 1</span>
+                <button type="button" id="trades-next" onclick="tradesNext()">Next</button>
+                <span>Per page</span>
+                <select id="trades-limit" onchange="tradesGoPage(1); loadTrades();">
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <span id="trades-total-info">Total: 0</span>
+            </div>
+        </div>
+        
+        <div id="status" style="font-size:11px; color:#8b949e; margin-top:12px;"></div>
+    </div>
+    
+    <script src="/static/js/common.js"></script>
+    <script>
+        let selectedAccount = '';
+        let tradesPage = 1;
+
+        function formatTradeTime(ts) {
+            if (!ts) return '--';
+            try {
+                const d = new Date(ts);
+                const y = d.getUTCFullYear();
+                const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(d.getUTCDate()).padStart(2, '0');
+                const h = String(d.getUTCHours()).padStart(2, '0');
+                const min = String(d.getUTCMinutes()).padStart(2, '0');
+                return y + '/' + m + '/' + day + ' ' + h + ':' + min;
+            } catch (e) { return ts; }
+        }
+
+        function tradesGoPage(p) { tradesPage = Math.max(1, p); }
+        function tradesPrev() { tradesGoPage(tradesPage - 1); loadTrades(); }
+        function tradesNext() { tradesGoPage(tradesPage + 1); loadTrades(); }
+
+        async function loadTrades() {
+            if (!selectedAccount) return;
+            const limit = parseInt(document.getElementById('trades-limit').value, 10) || 20;
+            try {
+                const data = await apiRequest('/api/trades?account=' + encodeURIComponent(selectedAccount) + '&page=' + tradesPage + '&limit=' + limit);
+                const list = data.trades || [];
+                const total = data.total != null ? data.total : 0;
+                const page = data.page != null ? data.page : 1;
+                const limitResp = data.limit != null ? data.limit : limit;
+                tradesPage = page;
+                const totalPages = Math.max(1, Math.ceil(total / limitResp));
+                const tbody = document.getElementById('trades');
+                tbody.innerHTML = list.map(t => `
+                    <tr>
+                        <td>${formatTradeTime(t.timestamp)}</td>
+                        <td>${t.symbol || '--'}</td>
+                        <td><span class="tag ${t.side}">${t.side === 'buy' ? 'Buy' : 'Sell'}</span></td>
+                        <td>${t.quantity != null ? t.quantity : '--'}</td>
+                        <td>${formatMoney(t.price)}</td>
+                        <td>${formatMoney(t.value != null ? t.value : (t.quantity * t.price) || 0)}</td>
+                    </tr>
+                `).join('') || '<tr><td colspan="6">No trades</td></tr>';
+                const bar = document.getElementById('trades-pagination');
+                bar.style.display = 'flex';
+                document.getElementById('trades-page-info').textContent = 'Page ' + page + ' of ' + totalPages;
+                document.getElementById('trades-total-info').textContent = 'Total: ' + total;
+                document.getElementById('trades-prev').disabled = page <= 1;
+                document.getElementById('trades-next').disabled = page >= totalPages;
+            } catch (e) {
+                document.getElementById('trades').innerHTML = '<tr><td colspan="6">Error loading</td></tr>';
+                document.getElementById('trades-pagination').style.display = 'none';
+            }
+        }
+
+        async function loadAccountList() {
+            const sel = document.getElementById('account-select');
+            try {
+                const data = await apiRequest('/api/accounts');
+                const accounts = data.accounts || [];
+                sel.innerHTML = '';
+                const opt0 = document.createElement('option');
+                opt0.value = '';
+                opt0.textContent = '-- Select account --';
+                sel.appendChild(opt0);
+                accounts.forEach(a => {
+                    const opt = document.createElement('option');
+                    opt.value = a.name;
+                    opt.textContent = a.name + (a.type ? ' (' + a.type + ')' : '');
+                    sel.appendChild(opt);
+                });
+                if (accounts.length > 0 && !selectedAccount) {
+                    selectedAccount = accounts[0].name;
+                    sel.value = selectedAccount;
+                }
+                if (selectedAccount) sel.value = selectedAccount;
+            } catch (e) {
+                sel.innerHTML = '<option value="">Failed to load</option>';
+                console.error(e);
+            }
+        }
+
+        function onAccountChange() {
+            selectedAccount = document.getElementById('account-select').value || '';
+            refresh();
+        }
+
+        async function refresh() {
+            selectedAccount = document.getElementById('account-select').value || '';
+            if (!selectedAccount) {
+                document.getElementById('equity').textContent = '--';
+                document.getElementById('cash').textContent = '--';
+                document.getElementById('market_value').textContent = '--';
+                document.getElementById('pnl').textContent = '--';
+                document.getElementById('positions').innerHTML = '<tr><td colspan="6">Select an account</td></tr>';
+                document.getElementById('trades').innerHTML = '<tr><td colspan="6">Select an account</td></tr>';
+                document.getElementById('trades-pagination').style.display = 'none';
+                document.getElementById('status').textContent = '';
+                return;
+            }
+            try {
+                const acc = await apiRequest('/api/account?account=' + encodeURIComponent(selectedAccount));
+                document.getElementById('equity').textContent = formatMoney(acc.equity || 0);
+                document.getElementById('cash').textContent = formatMoney(acc.cash || 0);
+                document.getElementById('market_value').textContent = formatMoney(acc.market_value || 0);
+                const pnlEl = document.getElementById('pnl');
+                pnlEl.textContent = formatPnl(acc.pnl || 0, acc.pnl_pct || 0);
+                pnlEl.className = 'card-value ' + ((acc.pnl || 0) >= 0 ? 'positive' : 'negative');
+                let positions = acc.positions || [];
+                const posHtml = positions.map(p => `
+                    <tr>
+                        <td>${p.symbol}</td>
+                        <td>${p.quantity}</td>
+                        <td>${formatMoney(p.avg_price)}</td>
+                        <td>${formatMoney(p.current_price)}</td>
+                        <td>${formatMoney(p.market_value)}</td>
+                        <td class="${(p.pnl || 0) >= 0 ? 'positive' : 'negative'}">${formatPnl(p.pnl || 0, p.pnl_pct || 0)}</td>
+                    </tr>
+                `).join('');
+                document.getElementById('positions').innerHTML = posHtml || '<tr><td colspan="6">No positions</td></tr>';
+                tradesPage = 1;
+                await loadTrades();
+                refreshFooterTime('status');
+            } catch (e) {
+                console.error(e);
+                document.getElementById('equity').textContent = '--';
+                document.getElementById('cash').textContent = '--';
+                document.getElementById('market_value').textContent = '--';
+                document.getElementById('pnl').textContent = '--';
+                document.getElementById('positions').innerHTML = '<tr><td colspan="6">Error loading</td></tr>';
+                document.getElementById('trades').innerHTML = '<tr><td colspan="6">Error loading</td></tr>';
+                document.getElementById('status').textContent = 'Error: ' + e.message;
+            }
+        }
+
+        loadAccountList().then(() => { if (selectedAccount) refresh(); });
+        refreshFooterTime('status');
+    </script>
+</body>
+</html>

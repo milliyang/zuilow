@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenTimestamps - Paper Trade</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/static/icon4-dollar.svg">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/nav.js"></script>
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            margin: 0 0 16px 0;
+            color: #f0f6fc;
+            font-size: 16px;
+        }
+        .btn {
+            background: #238636;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn:hover {
+            background: #2ea043;
+        }
+        .btn-secondary {
+            background: #21262d;
+            color: #c9d1d9;
+        }
+        .btn-secondary:hover {
+            background: #30363d;
+        }
+        .btn-danger {
+            background: #da3633;
+        }
+        .btn-danger:hover {
+            background: #f85149;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #21262d;
+            color: #c9d1d9;
+            font-size: 13px;
+        }
+        th {
+            color: #8b949e;
+            font-weight: 600;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .status-success {
+            background: rgba(63, 185, 80, 0.15);
+            color: #3fb950;
+        }
+        .status-pending {
+            background: rgba(251, 188, 5, 0.15);
+            color: #fbb305;
+        }
+        .status-error {
+            background: rgba(248, 81, 73, 0.15);
+            color: #f85149;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .action-buttons button {
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .info-item {
+            background: #0d1117;
+            padding: 12px;
+            border-radius: 4px;
+            border: 1px solid #21262d;
+        }
+        .info-item .label {
+            color: #8b949e;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+        .info-item .value {
+            color: #c9d1d9;
+            font-size: 14px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="header"></div>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Service Info</h2>
+            <div id="service-info" class="info-grid">
+                <div class="info-item">
+                    <div class="label">Storage Dir</div>
+                    <div class="value" id="storage-dir">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">Schedule</div>
+                    <div class="value" id="schedule">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">GitHub</div>
+                    <div class="value" id="github-enabled">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Actions</h2>
+            <div style="display:flex;gap:8px;">
+                <button class="btn admin-only" onclick="createTimestamp()" style="display:none;">&#x23F0; Create Timestamp</button>
+                <button class="btn btn-secondary" onclick="loadHistory()">&#x1F504; Refresh</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Timestamp History</h2>
+            <div id="history-container">
+                <div style="color:#8b949e;text-align:center;padding:20px;">Loading...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentUserRole = 'viewer';
+        async function loadUser() {
+            try {
+                const res = await fetch('/api/user');
+                if (res.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const user = await res.json();
+                currentUserRole = user.role || 'viewer';
+                document.getElementById('user-info').textContent = `${user.username} (${user.role})`;
+                
+                // Show/hide admin by role
+                if (currentUserRole === 'admin') {
+                    document.querySelectorAll('.admin-only').forEach(el => {
+                        el.style.display = '';
+                    });
+                } else {
+                    document.querySelectorAll('.admin-only').forEach(el => {
+                        el.style.display = 'none';
+                    });
+                }
+            } catch (e) {
+                console.error('Load user failed:', e);
+            }
+        }
+        
+        function logout() {
+            fetch('/api/logout', { method: 'POST' }).then(() => {
+                window.location.href = '/login';
+            });
+        }
+        
+        async function loadServiceInfo() {
+            try {
+                const res = await fetch('/api/ots/info');
+                if (!res.ok) {
+                    console.error('Load service info failed:', res.statusText);
+                    return;
+                }
+                const data = await res.json();
+                document.getElementById('storage-dir').textContent = data.storage_dir || '-';
+                document.getElementById('schedule').textContent = data.schedule || 'Not set';
+                document.getElementById('github-enabled').textContent = data.github_enabled ? 'Enabled' : 'Disabled';
+            } catch (e) {
+                console.error('Load service info failed:', e);
+            }
+        }
+
+        async function loadHistory() {
+            const container = document.getElementById('history-container');
+            container.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px;">Loading...</div>';
+
+            try {
+                const res = await fetch('/api/ots/history?limit=100');
+                const data = await res.json();
+
+                if (!data.history || data.history.length === 0) {
+                    container.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px;">No timestamps</div>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Time/Label</th>
+                                <th>Status</th>
+                                <th>Record</th>
+                                <th>Proof</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.history.map(item => {
+                                const hasProof = item.has_proof || false;
+                                const statusClass = hasProof ? 'status-success' : 'status-pending';
+                                const statusText = hasProof ? '&#x2713; Verified' : '&#x23F3; Pending';
+
+                                const dateKey = item.time_suffix ? `${item.date}_${item.time_suffix}` : item.date;
+
+                                let timeLabel = '-';
+                                if (item.label) {
+                                    timeLabel = item.label;
+                                } else if (item.time_suffix) {
+                                    timeLabel = item.time_suffix.replace(/-/g, ':');
+                                } else if (item.timestamp) {
+                                    try {
+                                        const dt = new Date(item.timestamp);
+                                        timeLabel = dt.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+                                    } catch (e) {
+                                        timeLabel = '-';
+                                    }
+                                }
+
+                                return `
+                                    <tr>
+                                        <td>${item.date}</td>
+                                        <td style="font-size:11px;color:#8b949e;">${timeLabel}</td>
+                                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                                        <td>&#x2713;</td>
+                                        <td>${hasProof ? '&#x2713;' : '&#x2717;'}</td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <button class="btn btn-secondary" onclick="downloadRecord('${dateKey}')">Download Record</button>
+                                                ${hasProof ? `<button class="btn btn-secondary" onclick="downloadProof('${dateKey}')">Download Proof</button>` : ''}
+                                                ${hasProof && currentUserRole === 'admin' ? `<button class="btn btn-secondary" onclick="verifyTimestamp('${dateKey}')">Verify</button>` : ''}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (e) {
+                container.innerHTML = `<div style="color:#f85149;text-align:center;padding:20px;">Load failed: ${e.message}</div>`;
+                console.error('Load history failed:', e);
+            }
+        }
+
+        async function createTimestamp() {
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            try {
+                const res = await fetch('/api/ots/create', { method: 'POST' });
+                const data = await res.json();
+
+                if (res.ok && data.status === 'ok') {
+                    btn.textContent = '&#x2713; Created';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                        loadHistory();
+                        loadServiceInfo();
+                    }, 2000);
+                } else {
+                    alert('Create failed: ' + (data.error || 'Unknown error'));
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                alert('Create failed: ' + e.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function downloadRecord(date) {
+            try {
+                const res = await fetch(`/api/ots/record/${date}`);
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    alert('Download failed: ' + (data.error || res.statusText));
+                    return;
+                }
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `record_${date}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Download failed: ' + e.message);
+            }
+        }
+
+        async function downloadProof(date) {
+            try {
+                const res = await fetch(`/api/ots/proof/${date}`);
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    alert('Download failed: ' + (data.error || res.statusText));
+                    return;
+                }
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `record_${date}.ots`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Download failed: ' + e.message);
+            }
+        }
+
+        async function verifyTimestamp(date) {
+            try {
+                const res = await fetch(`/api/ots/verify/${date}`, { method: 'POST' });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert('Verify failed: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+
+                if (data.verification && data.verification.verified) {
+                    alert('Verified. File hash: ' + (data.file_hash || '-'));
+                } else {
+                    const errorMsg = data.verification?.error || data.error || 'Verify failed';
+                    alert('Verify failed: ' + errorMsg);
+                }
+            } catch (e) {
+                alert('Verify failed: ' + e.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            if (typeof initNav === 'function') {
+                initNav({ title: 'OpenTimestamps', currentRoute: 'ots' });
+            }
+            await loadUser();
+            loadServiceInfo();
+            loadHistory();
+        });
+    </script>
+</body>
+</html>

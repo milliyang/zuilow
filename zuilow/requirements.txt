@@ -1,0 +1,28 @@
+# ZuiLow dependencies
+
+# Web framework
+flask>=3.0.0
+flask-cors>=4.0.0
+flask-login>=0.6.3
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Data sources
+yfinance>=0.2.31
+influxdb>=5.3.1
+
+# Futu API
+futu-api>=9.0.0
+
+# IBKR (optional; required for Brokers page Connect IBKR)
+ib_insync>=0.9.86
+
+# Config and utils
+PyYAML>=6.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Scheduler
+croniter>=2.0.0

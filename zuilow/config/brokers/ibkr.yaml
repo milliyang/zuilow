@@ -1,0 +1,12 @@
+# Interactive Brokers TWS / Gateway connection
+# Requires: TWS or IB Gateway running, API enabled, port open
+# Docs: https://www.interactivebrokers.com/en/trading/ib-api.php
+
+ibkr:
+  #host: "127.0.0.1"
+  host: "10.147.17.88"
+  port: 4002          # TWS paper=7497, TWS live=7496; Gateway paper=4002, live=4001
+  client_id: 1        # Unique per connection (1-32)
+  read_only: true     # If true, no orders; quotes/history only
+  account: ""         # Optional account id (empty = first/default)
+  timeout: 30         # Connection timeout (seconds)

@@ -1,0 +1,16 @@
+# InfluxDB 1.x config
+# Used as history data source for market service
+
+influxdb:
+  host: "localhost"
+  port: 8086
+  database: "stock_data"
+  username: ""
+  password: ""
+
+  # Multi-server (optional)
+  # servers:
+  #   - host: "server1"
+  #     port: 8086
+  #   - host: "server2"
+  #     port: 8086

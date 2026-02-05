@@ -1,0 +1,14 @@
+# ============================================================
+# DMS 用户配置 (参考 zuilow/config/users.yaml)
+# ============================================================
+# 仅 admin 角色可登录；此处列出的用户可访问 DMS 页面与 API。
+#
+# 密码生成:
+#   python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your_password'))"
+# ============================================================
+
+users:
+  admin:
+    password: "pbkdf2:sha256:260000$4WswiJJqXu9w8f8V$9011ec3c4851c74bc882a14dabb8c4789b899ff922bdf172149efdd8bcba1a0d"
+    role: admin
+    # 默认密码: admin123 (请修改!)

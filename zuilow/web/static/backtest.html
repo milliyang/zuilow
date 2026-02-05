@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZuiLow - Backtest</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/icon-monitor.svg">
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .backtest-container { 
+            display: flex; 
+            gap: 16px; 
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .backtest-sidebar { width: 300px; flex-shrink: 0; }
+        .backtest-main { flex: 1; min-width: 0; }
+        #chart-container {
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 6px;
+            padding: 14px;
+            height: 280px;
+            margin-bottom: 12px;
+        }
+        #chart { width: 100%; height: 100%; }
+        .loading { text-align: center; padding: 40px; color: #8b949e; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><img src="/static/img/icon-monitor.svg" alt="" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;">ZuiLow</h1>
+        <nav class="nav">
+            <a href="/">Account</a>
+            <a href="/backtest" class="active">Backtest</a>
+            <a href="/scheduler">Scheduler</a>
+            <a href="/signals">Signals</a>
+            <a href="/strategies">Strategies</a>
+            <a href="/live">Live</a>
+            <a href="/brokers">Brokers</a>
+            <a href="/status">Status</a>
+            <a href="#" class="nav-logout" onclick="logout(); return false;">Log out</a>
+        </nav>
+    </div>
+    
+    <div class="backtest-container">
+        <div class="backtest-sidebar">
+            <div class="card">
+                <div class="card-title">Backtest params</div>
+                <form id="backtest-form">
+                    <div class="form-group">
+                        <label>Symbol</label>
+                        <input type="text" name="symbol" value="SPY" placeholder="e.g. SPY, AAPL">
+                    </div>
+                    <div class="form-group">
+                        <label>Strategy</label>
+                        <select name="strategy" id="strategy-select">
+                            <option value="buyhold">Buy & hold</option>
+                            <option value="sma" selected>SMA</option>
+                            <option value="rsi">RSI</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Initial capital</label>
+                        <input type="number" name="initial_capital" value="100000">
+                    </div>
+                    
+                    <div id="sma-params">
+                        <div class="form-group">
+                            <label>Short period</label>
+                            <input type="number" name="short_period" value="5">
+                        </div>
+                        <div class="form-group">
+                            <label>Long period</label>
+                            <input type="number" name="long_period" value="20">
+                        </div>
+                    </div>
+                    
+                    <div id="rsi-params" class="hidden">
+                        <div class="form-group">
+                            <label>RSI period</label>
+                            <input type="number" name="rsi_period" value="14">
+                        </div>
+                        <div class="form-group">
+                            <label>Oversold</label>
+                            <input type="number" name="rsi_oversold" value="30">
+                        </div>
+                        <div class="form-group">
+                            <label>Overbought</label>
+                            <input type="number" name="rsi_overbought" value="70">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block" id="run-btn">Run backtest</button>
+                </form>
+                <div id="status" style="font-size:12px; color:#888; margin-top:10px;"></div>
+            </div>
+        </div>
+        
+        <div class="backtest-main">
+            <div id="results" class="hidden">
+                <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                    <div class="metric">
+                        <div class="metric-label">Total return</div>
+                        <div class="metric-value" id="total-return">--</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Annual return</div>
+                        <div class="metric-value" id="annual-return">--</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Max drawdown</div>
+                        <div class="metric-value" id="max-drawdown">--</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Sharpe ratio</div>
+                        <div class="metric-value" id="sharpe">--</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Win rate</div>
+                        <div class="metric-value" id="win-rate">--</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Trades</div>
+                        <div class="metric-value" id="trades-count">--</div>
+                    </div>
+                </div>
+                
+                <div id="chart-container">
+                    <canvas id="chart"></canvas>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">Trades</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Side</th>
+                                <th>Qty</th>
+                                <th>Price</th>
+                                <th>PnL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-table"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="placeholder" class="card">
+                <div class="loading">Set params and click Run backtest</div>
+            </div>
+        </div>
+    </div>
+    <div id="footer-time" style="font-size:11px; color:#8b949e; margin-top:12px; max-width:1400px; margin-left:auto; margin-right:auto;"></div>
+    
+    <script src="/static/js/common.js"></script>
+    <script>
+        const form = document.getElementById('backtest-form');
+        const strategySelect = document.getElementById('strategy-select');
+        const runBtn = document.getElementById('run-btn');
+        const status = document.getElementById('status');
+        
+        // Strategy params toggle
+        strategySelect.addEventListener('change', function() {
+            document.getElementById('sma-params').classList.toggle('hidden', this.value !== 'sma');
+            document.getElementById('rsi-params').classList.toggle('hidden', this.value !== 'rsi');
+        });
+        
+        // Submit backtest
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            runBtn.disabled = true;
+            runBtn.textContent = 'Running...';
+            status.textContent = '';
+            
+            const formData = new FormData(form);
+            const data = {};
+            formData.forEach((v, k) => data[k] = isNaN(v) ? v : Number(v));
+            
+            try {
+                const result = await apiRequest('/api/backtest', {
+                    method: 'POST',
+                    body: data
+                });
+                
+                displayResults(result);
+                
+            } catch (e) {
+                status.textContent = 'Error: ' + e.message;
+            } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = 'Run backtest';
+            }
+        });
+        
+        function displayResults(result) {
+            document.getElementById('placeholder').classList.add('hidden');
+            document.getElementById('results').classList.remove('hidden');
+            
+            const m = result.metrics;
+            const s = result.summary;
+            
+            // Metrics
+            setMetric('total-return', s.total_return_pct, '%');
+            setMetric('annual-return', m.annual_return, '%');
+            setMetric('max-drawdown', -m.max_drawdown, '%');
+            document.getElementById('sharpe').textContent = m.sharpe_ratio.toFixed(2);
+            document.getElementById('win-rate').textContent = m.win_rate.toFixed(1) + '%';
+            document.getElementById('trades-count').textContent = m.total_trades;
+            
+            // Chart
+            drawChart(result.equity_curve);
+            
+            // Trades
+            const tradesHtml = result.trades.map(t => `
+                <tr>
+                    <td>${t.timestamp.split('T')[0]}</td>
+                    <td><span class="tag ${t.side}">${t.side === 'buy' ? 'Buy' : 'Sell'}</span></td>
+                    <td>${t.quantity}</td>
+                    <td>$${t.price.toFixed(2)}</td>
+                    <td class="${t.pnl >= 0 ? 'positive' : 'negative'}">$${t.pnl.toFixed(2)}</td>
+                </tr>
+            `).join('');
+            document.getElementById('trades-table').innerHTML = tradesHtml || '<tr><td colspan="5">No trades</td></tr>';
+            
+            status.textContent = `Done: ${s.period}`;
+        }
+        
+        function setMetric(id, value, suffix = '') {
+            const el = document.getElementById(id);
+            const sign = value >= 0 ? '+' : '';
+            el.textContent = sign + value.toFixed(2) + suffix;
+            el.className = 'metric-value ' + (value >= 0 ? 'positive' : 'negative');
+        }
+        
+        function drawChart(data) {
+            const canvas = document.getElementById('chart');
+            const ctx = canvas.getContext('2d');
+            
+            const container = document.getElementById('chart-container');
+            canvas.width = container.clientWidth - 30;
+            canvas.height = container.clientHeight - 30;
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            const padding = 40;
+            
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, 0, w, h);
+            
+            if (data.length < 2) return;
+            
+            const values = data.map(d => d.equity);
+            const minVal = Math.min(...values) * 0.98;
+            const maxVal = Math.max(...values) * 1.02;
+            const range = maxVal - minVal;
+            
+            // Grid
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= 4; i++) {
+                const y = padding + (h - 2 * padding) * i / 4;
+                ctx.beginPath();
+                ctx.moveTo(padding, y);
+                ctx.lineTo(w - padding, y);
+                ctx.stroke();
+                
+                const val = maxVal - range * i / 4;
+                ctx.fillStyle = '#888';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('$' + val.toFixed(0), 5, y + 3);
+            }
+            
+            // Curve
+            ctx.strokeStyle = '#4ecca3';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            data.forEach((d, i) => {
+                const x = padding + (w - 2 * padding) * i / (data.length - 1);
+                const y = padding + (h - 2 * padding) * (1 - (d.equity - minVal) / range);
+                
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            
+            ctx.stroke();
+            
+            // Fill
+            const lastX = padding + (w - 2 * padding);
+            const baseY = h - padding;
+            ctx.lineTo(lastX, baseY);
+            ctx.lineTo(padding, baseY);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(78, 204, 163, 0.1)';
+            ctx.fill();
+        }
+        
+        refreshFooterTime('footer-time');
+    </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# DMS data source (ZuiLow connects to sai/dms as data provider)
+#
+# DMS exposes HTTP API for history data; ZuiLow uses this config to connect.
+# See: sai/dms/doc/api_reference.md
+#
+# When DMS has user login enabled, set headers.X-API-Key to the same value as DMS env DMS_API_KEY
+# so ZuiLow (server-to-server) can access DMS API without browser session.
+
+dms:
+  type: dms
+  # DMS service URL (match sai/dms port, default 11183)
+  base_url: "http://mongkok:11183"
+  # API prefix (DMS registers as /api/dms)
+  api_prefix: "/api/dms"
+  # Request timeout (seconds)
+  timeout: 15
+  # Server-to-server auth: must match DMS env DMS_API_KEY (when DMS login is enabled)
+  # Generate a random secret: python -c "import secrets; print(secrets.token_hex(16))"
+  headers:
+    X-API-Key: "your-shared-secret"

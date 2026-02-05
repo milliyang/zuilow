@@ -1,0 +1,71 @@
+# Full-stack simulation: stime + zuilow + ppt. DMS is external (set DMS_BASE_URL).
+# ZuiLow / PPT / Stime 的 run 目录挂载到宿主机 sai/simlulate/run/{zuilow,ppt,stime}，便于查看 log/DB。
+name: simlulate
+version: "3.8"
+
+services:
+  stime:
+    build:
+      context: ${REPO_ROOT}
+      dockerfile: simlulate/docker/Dockerfile.stime
+    container_name: sim-stime
+    ports:
+      - "${STIME_PORT:-11185}:11185"
+    environment:
+      - STIME_PORT=11185
+      - TICK_URLS=http://zuilow:11180/api/scheduler/tick,http://ppt:11182/api/scheduler/tick
+      - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-sim_webhook_shared_token}
+    volumes:
+      - ../run/stime:/app/run
+    restart: unless-stopped
+    networks:
+      - sim-network
+
+  zuilow:
+    build:
+      context: ${REPO_ROOT}
+      dockerfile: simlulate/docker/Dockerfile.zuilow
+    container_name: sim-zuilow
+    ports:
+      - "${ZUILOW_PORT:-11180}:11180"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=11180
+      - SIMULATION_TIME_URL=http://stime:11185
+      - PAPER_TRADE_URL=http://ppt:11182
+      - DMS_API_KEY=${DMS_API_KEY:-your-shared-secret}
+      - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-sim_webhook_shared_token}
+      - DMS_BASE_URL=${DMS_BASE_URL:-http://host.docker.internal:11183}
+    volumes:
+      - ../run/zuilow:/workspace/zuilow/run
+    depends_on:
+      - stime
+    restart: unless-stopped
+    networks:
+      - sim-network
+
+  ppt:
+    build:
+      context: ${REPO_ROOT}
+      dockerfile: simlulate/docker/Dockerfile.ppt
+    container_name: sim-ppt
+    ports:
+      - "${PPT_PORT:-11182}:11182"
+    environment:
+      - SIMULATION_MODE=1
+      - SIMULATION_TIME_URL=http://stime:11185
+      - DMS_BASE_URL=${DMS_BASE_URL:-http://host.docker.internal:11183}
+      - DMS_API_KEY=${DMS_API_KEY:-your-shared-secret}
+      - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-sim_webhook_shared_token}
+    volumes:
+      - ../run/ppt:/workspace/ppt/run
+    depends_on:
+      - stime
+    restart: unless-stopped
+    networks:
+      - sim-network
+
+networks:
+  sim-network:
+    driver: bridge
+

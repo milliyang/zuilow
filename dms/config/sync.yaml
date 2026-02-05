@@ -1,0 +1,46 @@
+# Sync Configuration (application-layer sync)
+# Default sync mode: realtime, scheduled, incremental, full
+
+sync:
+  default_mode: incremental    # Default sync mode
+  
+  # Real-time sync: trigger immediately on write
+  realtime:
+    enabled: true
+    trigger: on_write         # Trigger immediately on write
+    batch_size: 100           # Small batch, fast response
+    max_delay: 5              # Maximum delay (seconds)
+  
+  # Scheduled batch sync: sync at fixed intervals
+  scheduled:
+    enabled: true
+    interval: 300             # Sync every 5 minutes (seconds)
+    batch_size: 10000         # Large batch, high efficiency
+    time_window: 600          # Sync data from last 10 minutes (seconds)
+  
+  # Incremental sync: check and sync missing data periodically
+  incremental:
+    enabled: true
+    check_interval: 60        # Check every 60 seconds
+    batch_size: 5000
+    max_gap_hours: 24         # Maximum time gap 24 hours
+    initial_days: 1825        # First sync history range (days, 5 years)
+  
+  # Full sync: sync all data (disabled by default, manual trigger)
+  full:
+    enabled: false
+    parallel_symbols: 10      # Parallel sync 10 symbols
+    batch_size: 10000
+    time_window_hours: 24     # Sync 24 hours of data each time
+  
+  # Performance optimization
+  performance:
+    max_workers: 5             # Parallel sync threads
+    connection_pool_size: 5   # Connection pool size
+    enable_compression: false  # Enable data compression
+    compression_threshold: 100000  # Compression threshold (bytes)
+  
+  # General retry configuration
+  retry_times: 3              # Retry times on failure
+  retry_delay: 5              # Retry delay (seconds)
+  retry_backoff: exponential  # Retry backoff strategy: exponential, linear

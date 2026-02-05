@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZuiLow - Strategies</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/icon-monitor.svg">
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .strategies-table { font-size: 12px; }
+        .strategies-table th, .strategies-table td { padding: 6px 10px; }
+        .strategies-table .strategy-name { font-weight: 600; color: #f0f6fc; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><img src="/static/img/icon-monitor.svg" alt="" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;">ZuiLow</h1>
+        <nav class="nav">
+            <a href="/">Account</a>
+            <a href="/backtest">Backtest</a>
+            <a href="/scheduler">Scheduler</a>
+            <a href="/signals">Signals</a>
+            <a href="/strategies" class="active">Strategies</a>
+            <a href="/live">Live</a>
+            <a href="/brokers">Brokers</a>
+            <a href="/status">Status</a>
+            <a href="#" class="nav-logout" onclick="logout(); return false;">Log out</a>
+        </nav>
+    </div>
+    <div class="main-content">
+        <div class="card">
+            <div class="card-title">Strategies (by strategy name)</div>
+            <table class="strategies-table">
+                <thead>
+                    <tr>
+                        <th>Strategy</th>
+                        <th>Job</th>
+                        <th>Trigger</th>
+                        <th>Runs</th>
+                        <th>Last run</th>
+                    </tr>
+                </thead>
+                <tbody id="strategies-list">
+                    <tr><td colspan="5" style="text-align:center; color:#8b949e; font-size:12px;">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script src="/static/js/common.js"></script>
+    <script>
+        function escapeHtml(s) {
+            if (s == null) return '';
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        async function apiRequest(path) {
+            const res = await fetch(path, { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            return res.json();
+        }
+        async function load() {
+            const el = document.getElementById('strategies-list');
+            try {
+                const data = await apiRequest('/api/strategies');
+                if (!Array.isArray(data) || data.length === 0) {
+                    el.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#8b949e;">No strategies (no jobs with strategy name).</td></tr>';
+                    return;
+                }
+                var rows = [];
+                data.forEach(function(s) {
+                    var jobs = s.jobs || [];
+                    if (jobs.length === 0) {
+                        rows.push('<tr><td class="strategy-name">' + escapeHtml(s.strategy) + '</td><td colspan="4" style="color:#8b949e;">No jobs</td></tr>');
+                    } else {
+                        jobs.forEach(function(j, i) {
+                            var lastRun = j.last_run ? new Date(j.last_run).toLocaleString() : 'Never';
+                            rows.push('<tr><td class="strategy-name">' + escapeHtml(s.strategy) + '</td><td>' + escapeHtml(j.name) + '</td><td>' + escapeHtml(j.trigger || '-') + '</td><td>' + (j.run_count || 0) + '</td><td style="font-size:11px; color:#8b949e;">' + lastRun + '</td></tr>');
+                        });
+                    }
+                });
+                el.innerHTML = rows.join('');
+            } catch (e) {
+                el.innerHTML = '<tr><td colspan="5" style="color:#f85149;">Error: ' + escapeHtml(e.message) + '</td></tr>';
+            }
+        }
+        load();
+    </script>
+</body>
+</html>

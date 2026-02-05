@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cash Operations - Paper Trade</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/static/icon4-dollar.svg">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/nav.js"></script>
+    <script src="/static/js/app.js"></script>
+    <style>
+        .op-card {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 6px;
+            padding: 14px;
+        }
+        .op-card h3 {
+            margin: 0 0 10px 0;
+            color: #8b949e;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .op-card p {
+            color: #8b949e;
+            font-size: 13px;
+            margin: 0 0 16px 0;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .input-group input {
+            padding: 10px 12px;
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-size: 14px;
+            width: 140px;
+        }
+        .input-group input:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        .input-group label {
+            color: #8b949e;
+            font-size: 13px;
+        }
+        .btn-op {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .btn-deposit {
+            background: #238636;
+            color: white;
+        }
+        .btn-deposit:hover { background: #2ea043; }
+        .btn-withdraw {
+            background: #1f6feb;
+            color: white;
+        }
+        .btn-withdraw:hover { background: #388bfd; }
+        .btn-reset {
+            background: #21262d;
+            color: #f85149;
+            border: 1px solid #f85149;
+        }
+        .btn-reset:hover { background: rgba(248, 81, 73, 0.1); }
+        .result-box {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 16px;
+            font-size: 12px;
+            color: #8b949e;
+        }
+        .result-box.success { border-color: #3fb950; color: #3fb950; }
+        .result-box.error { border-color: #f85149; color: #f85149; }
+        .cash-display {
+            font-size: 18px;
+            color: #58a6ff;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .warning-box {
+            background: rgba(248, 81, 73, 0.1);
+            border: 1px solid #f85149;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 16px;
+            color: #f85149;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header"></div>
+
+    <div class="grid" style="max-width:900px;margin:0 auto;">
+        <div class="op-card" style="grid-column: span 2;">
+            <h3>Current Account</h3>
+            <div class="cash-display">Cash: <span id="current-cash">--</span></div>
+            <button class="btn-op" style="background:#21262d;border:1px solid #30363d;color:#8b949e;" onclick="refreshCash()">&#x1F504; Refresh</button>
+        </div>
+
+        <div class="op-card admin-only">
+            <h3>Deposit</h3>
+            <p>Deposit cash into the current account.</p>
+            <div class="input-group">
+                <label>Amount</label>
+                <input type="number" id="deposit-amount" value="10000" min="0.01" step="0.01" placeholder="Amount">
+            </div>
+            <button class="btn-op btn-deposit" onclick="deposit()">Deposit</button>
+            <div class="result-box" id="deposit-result" style="display:none;"></div>
+        </div>
+
+        <div class="op-card admin-only">
+            <h3>Withdraw</h3>
+            <p>Withdraw cash from the current account (up to available cash).</p>
+            <div class="input-group">
+                <label>Amount</label>
+                <input type="number" id="withdraw-amount" value="5000" min="0.01" step="0.01" placeholder="Amount">
+            </div>
+            <button class="btn-op btn-withdraw" onclick="withdraw()">Withdraw</button>
+            <div class="result-box" id="withdraw-result" style="display:none;"></div>
+        </div>
+
+        <div class="op-card admin-only" style="grid-column: span 2;">
+            <h3>Reset Account</h3>
+            <p>Clear positions, orders, trades, equity history; reset cash to initial capital. Admin only.</p>
+            <button class="btn-op btn-reset" onclick="resetAccount()">Clear &amp; Reset</button>
+            <div class="result-box" id="reset-result" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        async function refreshCash() {
+            try {
+                const res = await fetch('/api/account');
+                const data = await res.json();
+                if (data.cash !== undefined) {
+                    document.getElementById('current-cash').textContent = data.cash.toLocaleString('en-US', { minimumFractionDigits: 2 });
+                } else {
+                    document.getElementById('current-cash').textContent = '--';
+                }
+            } catch (e) {
+                document.getElementById('current-cash').textContent = '--';
+            }
+        }
+
+        async function deposit() {
+            const amount = parseFloat(document.getElementById('deposit-amount').value);
+            const resultBox = document.getElementById('deposit-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box';
+            resultBox.textContent = 'Submitting...';
+            if (!amount || amount <= 0) {
+                resultBox.className = 'result-box error';
+                resultBox.textContent = 'Enter amount &gt; 0';
+                return;
+            }
+            try {
+                const res = await fetch('/api/account/deposit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: amount })
+                });
+                const data = await res.json();
+                if (data.error) {
+                    resultBox.className = 'result-box error';
+                    resultBox.textContent = data.error;
+                } else {
+                    resultBox.className = 'result-box success';
+                    resultBox.textContent = data.message + ', Cash: ' + data.cash.toLocaleString('en-US', { minimumFractionDigits: 2 });
+                    refreshCash();
+                }
+            } catch (e) {
+                resultBox.className = 'result-box error';
+                resultBox.textContent = 'Request failed: ' + e.message;
+            }
+        }
+
+        async function withdraw() {
+            const amount = parseFloat(document.getElementById('withdraw-amount').value);
+            const resultBox = document.getElementById('withdraw-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box';
+            resultBox.textContent = 'Submitting...';
+            if (!amount || amount <= 0) {
+                resultBox.className = 'result-box error';
+                resultBox.textContent = 'Enter amount &gt; 0';
+                return;
+            }
+            try {
+                const res = await fetch('/api/account/withdraw', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: amount })
+                });
+                const data = await res.json();
+                if (data.error) {
+                    resultBox.className = 'result-box error';
+                    resultBox.textContent = data.error;
+                } else {
+                    resultBox.className = 'result-box success';
+                    resultBox.textContent = data.message + ', Cash: ' + data.cash.toLocaleString('en-US', { minimumFractionDigits: 2 });
+                    refreshCash();
+                }
+            } catch (e) {
+                resultBox.className = 'result-box error';
+                resultBox.textContent = 'Request failed: ' + e.message;
+            }
+        }
+
+        async function resetAccount() {
+            if (!confirm('Clear and reset current account? All positions, orders, trades, equity history will be cleared; cash reset to initial capital.')) return;
+            const resultBox = document.getElementById('reset-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box';
+            resultBox.textContent = 'Submitting...';
+            try {
+                const res = await fetch('/api/account/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                const data = await res.json();
+                if (data.error) {
+                    resultBox.className = 'result-box error';
+                    resultBox.textContent = data.error;
+                } else {
+                    resultBox.className = 'result-box success';
+                    resultBox.textContent = data.message;
+                    refreshCash();
+                }
+            } catch (e) {
+                resultBox.className = 'result-box error';
+                resultBox.textContent = 'Request failed: ' + e.message;
+            }
+        }
+    </script>
+    <div id="footer-time" style="font-size:11px;color:#8b949e;margin:12px 16px;"></div>
+    <script src="/static/js/app.js"></script>
+    <script>
+        if (typeof loadUser === 'function') loadUser();
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof initNav === 'function') initNav({ title: 'Cash Operations', currentRoute: 'cash' });
+            refreshCash();
+        });
+    </script>
+</body>
+</html>

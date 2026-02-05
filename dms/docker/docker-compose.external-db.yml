@@ -1,0 +1,33 @@
+version: '3.8'
+
+# Docker Compose 配置 - 使用外部 InfluxDB
+# 如果已有 InfluxDB 服务，使用此配置
+
+services:
+  dms:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: dms
+    ports:
+      - "${DMS_PORT:-11183}:11183"
+    volumes:
+      - ../config:/app/dms/config:ro
+      - ../data:/app/dms/data
+      - ../run:/app/dms/run
+    environment:
+      - DMS_HOST=${DMS_HOST:-0.0.0.0}
+      - DMS_PORT=${DMS_PORT:-11183}
+      - DMS_LOG_LEVEL=${DMS_LOG_LEVEL:-INFO}
+      - DMS_LOG_DIR=/app/dms/run/logs
+      - WAIT_FOR_INFLUXDB=false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:11183/api/dms/status').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # 使用 extra_hosts 以访问宿主机上的 InfluxDB
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

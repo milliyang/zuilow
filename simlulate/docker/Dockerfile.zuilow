@@ -1,0 +1,18 @@
+# Build with context = repo root (parent of simlulate). Zuilow app expects parent dir in path.
+FROM python:3.11-slim
+
+WORKDIR /workspace
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY zuilow/requirements.txt zuilow/
+RUN pip install --no-cache-dir -r zuilow/requirements.txt
+
+COPY zuilow/ zuilow/
+# 去掉镜像内宿主的 run 数据，避免新卷挂载时被 Docker 用镜像内容初始化
+RUN rm -rf zuilow/run && mkdir -p zuilow/run/db zuilow/run/logs
+
+EXPOSE 11180
+
+CMD ["python", "zuilow/app.py"]

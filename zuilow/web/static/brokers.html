@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZuiLow - Brokers</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/icon-monitor.svg">
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .card .card-title .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #f0f6fc;
+            text-transform: none;
+            letter-spacing: 0;
+            margin-bottom: 0;
+        }
+        .broker-card form { max-width: 520px; }
+        .broker-card {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 6px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+        }
+        .broker-card h3 { margin: 0 0 6px 0; font-size: 15px; color: #f0f6fc; display: flex; align-items: center; gap: 8px; }
+        .broker-card .status-badge { font-size: 11px; }
+        .broker-card p { margin: 0 0 12px 0; font-size: 13px; color: #8b949e; line-height: 1.4; }
+        .broker-card .form-actions { margin-top: 10px; display: flex; gap: 8px; }
+        .broker-card .form-actions-with-hint { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .broker-card .form-actions-hint { font-size: 12px; color: #8b949e; margin-left: auto; }
+        .broker-card a { color: #58a6ff; }
+        .broker-card .market-data-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 12px; color: #8b949e; }
+        .broker-card .market-data-row .label { color: #8b949e; min-width: 82px; }
+        .broker-card .market-data-row .toggle-group { display: flex; gap: 4px; }
+        .broker-card .market-data-row .toggle-btn {
+            padding: 4px 12px; font-size: 12px; border-radius: 6px; border: 1px solid #21262d;
+            background: #21262d; color: #8b949e; cursor: pointer; transition: all 0.15s;
+        }
+        .broker-card .market-data-row .toggle-btn:hover { background: #30363d; color: #c9d1d9; }
+        .broker-card .market-data-row .toggle-btn.active { background: #238636; color: #fff; border-color: #238636; }
+        .broker-card #ibkr-read-only-true-btn.active { background: #da3633; color: #fff; border-color: #da3633; }
+        .broker-card #ibkr-read-only-true-btn.active:hover { background: #b62324; border-color: #b62324; }
+        .broker-card .read-only-hint { margin-left: 8px; font-size: 11px; color: #8b949e; font-weight: bold; }
+        .broker-card .read-only-hint.read-only-hint-danger { color: #f85149; }
+        .broker-card .ibkr-port-quick { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 12px; }
+        .broker-card .ibkr-port-quick .label { color: #8b949e; min-width: 82px; }
+        .broker-card .ibkr-port-quick .toggle-group { display: flex; gap: 4px; }
+        .broker-card .ibkr-port-quick .toggle-btn {
+            padding: 4px 12px; font-size: 12px; border-radius: 6px; border: 1px solid #388bfd;
+            background: rgba(56, 139, 253, 0.15); color: #58a6ff; cursor: pointer; transition: all 0.15s;
+        }
+        .broker-card .ibkr-port-quick .toggle-btn:hover { background: rgba(56, 139, 253, 0.25); color: #79c0ff; border-color: #58a6ff; }
+        .broker-card .ibkr-connect-fields .form-row { margin-bottom: 12px; }
+        .broker-card .ibkr-connect-fields .form-row:last-of-type { margin-bottom: 0; }
+        .broker-card .ibkr-port-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+        .broker-card .ibkr-port-row .form-group { margin-bottom: 0; }
+        .broker-card .ibkr-port-row input#ibkr-port { width: 72px; }
+        .real-account-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .real-account-row .account-name { font-size: 13px; }
+        .broker-test-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+        .broker-test-label { color: #8b949e; min-width: 40px; }
+        .broker-test-url { color: #58a6ff; font-family: ui-monospace, monospace; }
+        .broker-test-result { font-size: 12px; margin-left: 4px; }
+        .broker-status-detail { font-size: 11px; color: #8b949e; margin-left: 6px; font-weight: normal; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><img src="/static/img/icon-monitor.svg" alt="" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;">ZuiLow</h1>
+        <nav class="nav">
+            <a href="/">Account</a>
+            <a href="/backtest">Backtest</a>
+            <a href="/scheduler">Scheduler</a>
+            <a href="/signals">Signals</a>
+            <a href="/strategies">Strategies</a>
+            <a href="/live">Live</a>
+            <a href="/brokers" class="active">Brokers</a>
+            <a href="/status">Status</a>
+            <a href="#" class="nav-logout" onclick="logout(); return false;">Log out</a>
+        </nav>
+    </div>
+    <div class="main-content">
+        <p style="color:#8b949e; font-size:12px; margin-bottom:16px;">Connect or disconnect each broker. Account-level trading is on the <a href="/live" class="live-hint-link">Live</a> page.</p>
+
+        <!-- 1. Futu -->
+        <div class="card broker-card" style="margin-bottom: 20px;">
+            <div class="card-title">
+                <span class="section-title">Futu <span id="futu-status-badge" class="status-badge status-disconnected">Disconnected</span></span>
+            </div>
+            <div class="section" style="margin-bottom:16px;">
+                <div class="section-title" style="font-size:11px; margin-bottom:8px;">Real accounts (enable to allow live orders)</div>
+                <div id="futu-real-accounts-list"></div>
+            </div>
+            <form id="futu-connect-form">
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;"><label>Host</label><input type="text" name="host" id="futu-host" placeholder="127.0.0.1"></div>
+                    <div class="form-group" style="width:90px;flex:none;"><label>Port</label><input type="number" name="port" id="futu-port" value="11111"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Unlock password</label><input type="password" name="unlock_password" id="futu-unlock" placeholder="Empty = simulate"></div>
+                    <div class="form-group"><label>RSA key file</label><input type="text" name="rsa_file" id="futu-rsa" placeholder="Optional"></div>
+                </div>
+                <div class="form-actions form-actions-with-hint">
+                    <div>
+                        <button type="submit" id="futu-connect-btn" class="btn btn-primary">Connect</button>
+                        <button type="button" id="futu-disconnect-btn" class="btn btn-danger hidden" onclick="futuDisconnect()">Disconnect</button>
+                    </div>
+                    <span class="form-actions-hint">Connect Futu OpenD for HK/US quotes and live trading.</span>
+                </div>
+            </form>
+        </div>
+
+        <!-- 2. Paper Trade (PPT) -->
+        <div class="card broker-card" style="margin-bottom: 20px;">
+            <div class="card-title">
+                <span class="section-title">Paper Trade (PPT) <span id="paper-status-badge" class="status-badge status-disconnected">Disconnected</span><span id="paper-status-detail" class="broker-status-detail"></span></span>
+            </div>
+            <p style="color:#8b949e; font-size:13px; margin:0 0 12px 0; line-height:1.4;">Simulated trading via PPT broker. Set <code>base_url</code>, <code>webhook_token</code> and <code>dms</code> in <code>config/brokers/ppt.yaml</code>. Connect requires both PPT and DMS reachable.</p>
+            <div class="broker-test-row" style="margin-bottom:8px;">
+                <span class="broker-test-label">PPT:</span>
+                <span class="broker-test-url" id="ppt-url">--</span>
+                <span class="broker-test-label" style="margin-left:12px;">DMS:</span>
+                <span class="broker-test-url" id="ppt-dms-url">--</span>
+            </div>
+            <div class="broker-test-row">
+                <button type="button" id="ppt-connect-btn" class="btn btn-primary">Connect</button>
+                <button type="button" id="ppt-disconnect-btn" class="btn btn-danger hidden" onclick="pptDisconnect()">Disconnect</button>
+                <button type="button" id="ppt-test-btn" class="btn btn-secondary">Test connection</button>
+                <span class="broker-test-result" id="ppt-test-result"></span>
+            </div>
+        </div>
+
+        <!-- 3. IBKR -->
+        <div class="card broker-card">
+            <div class="card-title">
+                <span class="section-title">IBKR (Interactive Brokers) <span id="ibkr-status-badge" class="status-badge status-disconnected">Disconnected</span></span>
+            </div>
+            <div id="ibkr-market-data-row" class="market-data-row">
+                <span class="label">Market data :</span>
+                <span class="toggle-group">
+                    <button type="button" id="ibkr-market-data-live-btn" class="toggle-btn" data-type="1">Live</button>
+                    <button type="button" id="ibkr-market-data-delayed-btn" class="toggle-btn" data-type="3">Delayed</button>
+                </span>
+            </div>
+            <div id="ibkr-read-only-row" class="market-data-row">
+                <span class="label">Read only :</span>
+                <span class="toggle-group">
+                    <button type="button" id="ibkr-read-only-true-btn" class="toggle-btn" data-value="true">True</button>
+                    <button type="button" id="ibkr-read-only-false-btn" class="toggle-btn" data-value="false">False</button>
+                </span>
+                <span id="ibkr-read-only-hint" class="read-only-hint">allow live orders</span>
+            </div>
+            <form id="ibkr-connect-form" class="ibkr-connect-fields">
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;"><label>Host</label><input type="text" name="host" id="ibkr-host" placeholder="127.0.0.1"></div>
+                </div>
+                <div class="form-row ibkr-port-row">
+                    <div class="form-group">
+                        <label>Port</label>
+                        <input type="number" name="port" id="ibkr-port" placeholder="7497">
+                    </div>
+                    <div class="ibkr-port-quick">
+                        <span class="label">Quick :</span>
+                        <span class="toggle-group">
+                            <button type="button" id="ibkr-port-sim-btn" class="toggle-btn" title="Simulate (paper)">Sim (4002)</button>
+                            <button type="button" id="ibkr-port-real-btn" class="toggle-btn" title="Real (live)">Real (4001)</button>
+                        </span>
+                    </div>
+                </div>
+                <div class="form-actions form-actions-with-hint">
+                    <div>
+                        <button type="submit" id="ibkr-connect-btn" class="btn btn-primary">Connect</button>
+                        <button type="button" id="ibkr-disconnect-btn" class="btn btn-danger hidden" onclick="ibkrDisconnect()">Disconnect</button>
+                    </div>
+                    <span class="form-actions-hint">Connect TWS or IB Gateway for quotes and live trading.</span>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script src="/static/js/common.js"></script>
+    <script>
+        (function() {
+            const futuStatusEl = document.getElementById('futu-status-badge');
+            const futuConnectBtn = document.getElementById('futu-connect-btn');
+            const futuDisconnectBtn = document.getElementById('futu-disconnect-btn');
+            const futuForm = document.getElementById('futu-connect-form');
+
+            function setFutuUI(connected) {
+                if (connected) {
+                    futuStatusEl.textContent = 'Connected';
+                    futuStatusEl.className = 'status-badge status-connected';
+                    futuConnectBtn.classList.add('hidden');
+                    futuDisconnectBtn.classList.remove('hidden');
+                } else {
+                    futuStatusEl.textContent = 'Disconnected';
+                    futuStatusEl.className = 'status-badge status-disconnected';
+                    futuConnectBtn.classList.remove('hidden');
+                    futuDisconnectBtn.classList.add('hidden');
+                }
+            }
+
+            async function loadFutuStatus() {
+                try {
+                    const res = await fetch('/api/futu/status');
+                    const data = await res.json();
+                    if (data.config) {
+                        document.getElementById('futu-host').value = data.config.host || '';
+                        document.getElementById('futu-port').value = data.config.port || 11111;
+                        document.getElementById('futu-rsa').value = data.config.rsa_file || '';
+                    }
+                    setFutuUI(data.connected);
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            function setPaperUI(connected, ppt_ok, dms_ok, base_url, dms_base_url) {
+                const badge = document.getElementById('paper-status-badge');
+                const detail = document.getElementById('paper-status-detail');
+                const connectBtn = document.getElementById('ppt-connect-btn');
+                const disconnectBtn = document.getElementById('ppt-disconnect-btn');
+                if (connected) {
+                    badge.textContent = 'Connected';
+                    badge.className = 'status-badge status-connected';
+                    detail.textContent = '';
+                    connectBtn.classList.add('hidden');
+                    disconnectBtn.classList.remove('hidden');
+                } else {
+                    badge.textContent = 'Disconnected';
+                    badge.className = 'status-badge status-disconnected';
+                    if (ppt_ok !== undefined && dms_ok !== undefined) {
+                        if (!ppt_ok && !dms_ok) detail.textContent = '(PPT and DMS unreachable)';
+                        else if (!ppt_ok) detail.textContent = '(PPT unreachable)';
+                        else detail.textContent = '(DMS unreachable)';
+                    } else {
+                        detail.textContent = '';
+                    }
+                    connectBtn.classList.remove('hidden');
+                    disconnectBtn.classList.add('hidden');
+                }
+                document.getElementById('ppt-url').textContent = base_url || '--';
+                document.getElementById('ppt-dms-url').textContent = dms_base_url || '--';
+            }
+
+            async function loadPaperStatus() {
+                try {
+                    const configRes = await fetch('/api/brokers/ppt/config');
+                    const config = await configRes.json();
+                    const statusRes = await fetch('/api/brokers/ppt/status');
+                    const status = await statusRes.json();
+                    const base_url = status.base_url || config.base_url;
+                    const dms_base_url = status.dms_base_url || config.dms_base_url;
+                    setPaperUI(status.connected, status.ppt_ok, status.dms_ok, base_url, dms_base_url);
+                } catch (e) {
+                    document.getElementById('paper-status-badge').textContent = '--';
+                }
+            }
+
+            window.pptDisconnect = async function() {
+                try {
+                    await fetch('/api/brokers/ppt/disconnect', { method: 'POST' });
+                    await loadPaperStatus();
+                } catch (e) {
+                    alert('Disconnect failed');
+                }
+            };
+
+            document.getElementById('ppt-connect-btn').addEventListener('click', async function() {
+                const btn = this;
+                btn.disabled = true;
+                setBrokerTestResult('ppt-test-result', 'Connecting…', true);
+                try {
+                    const res = await fetch('/api/brokers/ppt/connect', { method: 'POST' });
+                    const data = await res.json();
+                    setPaperUI(data.connected, data.ppt_ok, data.dms_ok, data.base_url, data.dms_base_url);
+                    setBrokerTestResult('ppt-test-result', data.message || (data.connected ? 'OK' : 'Failed'), !!data.connected);
+                    if (!res.ok) setBrokerTestResult('ppt-test-result', data.message || 'Connect failed', false);
+                    await loadPaperStatus();
+                } catch (e) {
+                    setBrokerTestResult('ppt-test-result', 'Request failed: ' + e.message, false);
+                }
+                btn.disabled = false;
+            });
+
+            function setBrokerTestResult(id, text, isOk) {
+                const el = document.getElementById(id);
+                el.textContent = text;
+                el.style.color = isOk ? '#3fb950' : '#f85149';
+            }
+
+            document.getElementById('ppt-test-btn').addEventListener('click', async function() {
+                const btn = this;
+                btn.disabled = true;
+                setBrokerTestResult('ppt-test-result', 'Testing…', true);
+                try {
+                    const res = await fetch('/api/brokers/ppt/test');
+                    const data = await res.json();
+                    setPaperUI(data.connected, data.ppt_ok, data.dms_ok, data.base_url, data.dms_base_url);
+                    setBrokerTestResult('ppt-test-result', data.message || (data.ok ? 'OK' : 'Failed'), !!data.ok);
+                    await loadPaperStatus();
+                } catch (e) {
+                    setBrokerTestResult('ppt-test-result', 'Request failed: ' + e.message, false);
+                }
+                btn.disabled = false;
+            });
+
+            futuForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const data = {
+                    host: document.getElementById('futu-host').value || '127.0.0.1',
+                    port: parseInt(document.getElementById('futu-port').value, 10) || 11111,
+                    unlock_password: document.getElementById('futu-unlock').value,
+                    rsa_file: document.getElementById('futu-rsa').value
+                };
+                try {
+                    const res = await fetch('/api/futu/connect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    const result = await res.json();
+                    if (!res.ok) throw new Error(result.error || result.detail || 'Connect failed');
+                    setFutuUI(true);
+                } catch (err) {
+                    alert('Connect failed: ' + err.message);
+                }
+            });
+
+            window.futuDisconnect = async function() {
+                try {
+                    await fetch('/api/futu/disconnect', { method: 'POST' });
+                    setFutuUI(false);
+                } catch (e) {
+                    alert('Disconnect failed');
+                }
+            };
+
+            async function loadFutuRealAccounts() {
+                const el = document.getElementById('futu-real-accounts-list');
+                try {
+                    const res = await fetch('/api/brokers/futu/accounts');
+                    const data = await res.json();
+                    const accounts = data.accounts || [];
+                    if (accounts.length === 0) {
+                        el.innerHTML = '<p style="color:#8b949e;font-size:13px;margin:0;">No Real accounts in config/accounts.yaml (env: REAL).</p>';
+                        return;
+                    }
+                    el.innerHTML = accounts.map(function(a) {
+                        const enabled = a.enabled;
+                        const badge = enabled
+                            ? '<span class="status-badge status-connected">Enabled</span>'
+                            : '<span class="status-badge status-disconnected">Disabled</span>';
+                        const btn = enabled
+                            ? '<button type="button" class="btn btn-secondary" data-name="' + (a.name || '').replace(/"/g, '&quot;') + '">Disable</button>'
+                            : '<button type="button" class="btn btn-primary" data-name="' + (a.name || '').replace(/"/g, '&quot;') + '">Enable</button>';
+                        return '<div class="real-account-row"><span class="account-name">' + (a.name || '') + '</span>' + badge + btn + '</div>';
+                    }).join('');
+                    el.querySelectorAll('button[data-name]').forEach(function(btn) {
+                        btn.addEventListener('click', async function() {
+                            const name = this.getAttribute('data-name');
+                            const enable = this.textContent === 'Enable';
+                            try {
+                                const r = await fetch('/api/brokers/futu/accounts/' + encodeURIComponent(name) + '/enabled', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ enabled: enable })
+                                });
+                                const j = await r.json();
+                                if (!r.ok) throw new Error(j.error || 'Failed');
+                                loadFutuRealAccounts();
+                            } catch (e) {
+                                alert(e.message || 'Failed');
+                            }
+                        });
+                    });
+                } catch (e) {
+                    el.innerHTML = '<p style="color:#f85149;font-size:13px;margin:0;">Load failed.</p>';
+                }
+            }
+
+            // IBKR
+            const ibkrStatusEl = document.getElementById('ibkr-status-badge');
+            const ibkrConnectBtn = document.getElementById('ibkr-connect-btn');
+            const ibkrDisconnectBtn = document.getElementById('ibkr-disconnect-btn');
+            const ibkrForm = document.getElementById('ibkr-connect-form');
+            const ibkrMarketDataRow = document.getElementById('ibkr-market-data-row');
+            const ibkrMarketDataLiveBtn = document.getElementById('ibkr-market-data-live-btn');
+            const ibkrMarketDataDelayedBtn = document.getElementById('ibkr-market-data-delayed-btn');
+            const ibkrReadOnlyRow = document.getElementById('ibkr-read-only-row');
+            const ibkrReadOnlyTrueBtn = document.getElementById('ibkr-read-only-true-btn');
+            const ibkrReadOnlyFalseBtn = document.getElementById('ibkr-read-only-false-btn');
+            function setIbkrMarketDataActive(typeId) {
+                typeId = typeId === 3 ? 3 : 1;
+                ibkrMarketDataLiveBtn.classList.toggle('active', typeId === 1);
+                ibkrMarketDataDelayedBtn.classList.toggle('active', typeId === 3);
+            }
+            function setIbkrReadOnlyActive(readOnly) {
+                var ro = !!readOnly;
+                ibkrReadOnlyTrueBtn.classList.toggle('active', ro);
+                ibkrReadOnlyFalseBtn.classList.toggle('active', !ro);
+                var hintEl = document.getElementById('ibkr-read-only-hint');
+                if (hintEl) {
+                    hintEl.textContent = ro ? 'Not allow live orders' : 'Allow live orders';
+                    hintEl.classList.toggle('read-only-hint-danger', ro);
+                }
+            }
+            function setIbkrUI(connected, marketDataType, readOnly) {
+                if (connected) {
+                    ibkrStatusEl.textContent = 'Connected';
+                    ibkrStatusEl.className = 'status-badge status-connected';
+                    ibkrConnectBtn.classList.add('hidden');
+                    ibkrDisconnectBtn.classList.remove('hidden');
+                    if (marketDataType != null) setIbkrMarketDataActive(marketDataType);
+                    if (readOnly != null) setIbkrReadOnlyActive(readOnly);
+                } else {
+                    ibkrStatusEl.textContent = 'Disconnected';
+                    ibkrStatusEl.className = 'status-badge status-disconnected';
+                    ibkrConnectBtn.classList.remove('hidden');
+                    ibkrDisconnectBtn.classList.add('hidden');
+                    setIbkrMarketDataActive(1);
+                    if (readOnly != null) setIbkrReadOnlyActive(readOnly);
+                }
+            }
+            async function loadIbkrStatus() {
+                try {
+                    const res = await fetch('/api/ibkr/status');
+                    const data = await res.json();
+                    if (data.config) {
+                        document.getElementById('ibkr-host').value = data.config.host || '';
+                        document.getElementById('ibkr-port').value = data.config.port || 7497;
+                    }
+                    setIbkrUI(data.connected, data.market_data_type, data.config && data.config.read_only);
+                } catch (e) { console.error(e); }
+            }
+            ibkrMarketDataLiveBtn.addEventListener('click', async function() {
+                try {
+                    const res = await fetch('/api/ibkr/market_data_type', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type_id: 1 }) });
+                    const j = await res.json();
+                    if (!res.ok) throw new Error(j.error || 'Failed');
+                    setIbkrMarketDataActive(1);
+                } catch (e) { alert(e.message || 'Failed'); }
+            });
+            ibkrMarketDataDelayedBtn.addEventListener('click', async function() {
+                try {
+                    const res = await fetch('/api/ibkr/market_data_type', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type_id: 3 }) });
+                    const j = await res.json();
+                    if (!res.ok) throw new Error(j.error || 'Failed');
+                    setIbkrMarketDataActive(3);
+                } catch (e) { alert(e.message || 'Failed'); }
+            });
+            setIbkrReadOnlyActive(false);
+            ibkrReadOnlyTrueBtn.addEventListener('click', async function() {
+                try {
+                    const res = await fetch('/api/ibkr/read_only', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read_only: true }) });
+                    const j = await res.json();
+                    if (!res.ok) throw new Error(j.error || 'Failed');
+                    setIbkrReadOnlyActive(true);
+                } catch (e) { alert(e.message || 'Failed'); }
+            });
+            ibkrReadOnlyFalseBtn.addEventListener('click', async function() {
+                try {
+                    const res = await fetch('/api/ibkr/read_only', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read_only: false }) });
+                    const j = await res.json();
+                    if (!res.ok) throw new Error(j.error || 'Failed');
+                    setIbkrReadOnlyActive(false);
+                } catch (e) { alert(e.message || 'Failed'); }
+            });
+            document.getElementById('ibkr-port-sim-btn').addEventListener('click', function() { document.getElementById('ibkr-port').value = 4002; });
+            document.getElementById('ibkr-port-real-btn').addEventListener('click', function() { document.getElementById('ibkr-port').value = 4001; });
+            ibkrForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const data = {
+                    host: document.getElementById('ibkr-host').value || '127.0.0.1',
+                    port: parseInt(document.getElementById('ibkr-port').value, 10) || 7497
+                };
+                try {
+                    const res = await fetch('/api/ibkr/connect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    const result = await res.json();
+                    if (!res.ok) throw new Error(result.error || result.detail || 'Connect failed');
+                    await loadIbkrStatus();
+                } catch (err) { alert('Connect failed: ' + err.message); }
+            });
+            window.ibkrDisconnect = async function() {
+                try {
+                    await fetch('/api/ibkr/disconnect', { method: 'POST' });
+                    setIbkrUI(false);
+                } catch (e) { alert('Disconnect failed'); }
+            };
+
+            loadFutuStatus();
+            loadPaperStatus();
+            loadFutuRealAccounts();
+            loadIbkrStatus();
+        })();
+    </script>
+</body>
+</html>

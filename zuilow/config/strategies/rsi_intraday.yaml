@@ -1,0 +1,12 @@
+# RSI intraday strategy params
+strategy: RSIStrategy
+description: RSI overbought/oversold strategy
+
+params:
+  period: 14           # RSI period
+  overbought: 70       # Overbought level
+  oversold: 30         # Oversold level
+
+risk:
+  max_position: 5000
+  stop_loss: 0.03
