@@ -121,16 +121,35 @@
             </table>
         </div>
 
+        <!-- Watchlist names (PPT): refresh display names from DMS for current account positions -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card-title">
+                <span class="section-title">Watchlist names (PPT)</span>
+                <span style="font-size:11px;color:#8b949e;font-weight:normal;">Update watchlist display names from DMS for current account position symbols.</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px;">
+                <button type="button" class="btn btn-primary test-btn" onclick="refreshWatchlistNamesFromPositions()">Refresh</button>
+                <span id="watchlist-names-result" class="test-result">--</span>
+            </div>
+        </div>
+
         <div id="status-msg" style="font-size:11px;color:#8b949e;margin-top:16px;"></div>
     </div>
 
     <script src="/static/js/common.js"></script>
     <script>
         async function apiRequest(url, options = {}) {
-            const merged = { headers: { 'Content-Type': 'application/json' }, ...options };
+            const merged = { credentials: 'include', headers: { 'Content-Type': 'application/json' }, ...options };
             if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData))
                 merged.body = JSON.stringify(options.body);
             const res = await fetch(url, merged);
+            const ct = (res.headers.get('content-type') || '').toLowerCase();
+            if (!ct.includes('application/json')) {
+                const text = await res.text();
+                if (text.trim().toLowerCase().startsWith('<!doctype') || text.trim().toLowerCase().startsWith('<html'))
+                    throw new Error('服务器返回了登录页或错误页，请重新登录或检查网络');
+                throw new Error(res.status ? '请求失败: ' + res.status : '请求失败');
+            }
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || data.detail || 'Request failed');
             return data;
@@ -252,6 +271,21 @@
             } catch (e) {
                 el.textContent = e.message;
                 el.className = 'test-result err';
+            }
+        }
+
+        async function refreshWatchlistNamesFromPositions() {
+            const resultEl = document.getElementById('watchlist-names-result');
+            resultEl.textContent = 'Updating…';
+            resultEl.className = 'test-result';
+            try {
+                const data = await apiRequest('/api/system/watchlist-names/refresh', { method: 'POST' });
+                const n = data.updated != null ? data.updated : 0;
+                resultEl.textContent = (data.message || 'Updated ' + n);
+                resultEl.className = 'test-result ok';
+            } catch (e) {
+                resultEl.textContent = e.message || 'Failed';
+                resultEl.className = 'test-result err';
             }
         }
 

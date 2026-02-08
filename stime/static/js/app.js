@@ -129,15 +129,37 @@ async function advanceAndTick() {
   const val = Math.max(1, parseInt(document.getElementById('advVal').value, 10) || 1);
   let body;
   if (chk && chk.checked) {
-    const stepMin = parseInt(document.getElementById('fineStepMinutes').value, 10) || 30;
-    const stepsPerDay = stepMin === 5 ? 288 : stepMin === 15 ? 96 : 48;
-    // Multiply by advance amount so e.g. "3 days" => 3 * 48 = 144 steps (continuous ticks over 3 days)
-    let stepCount = stepsPerDay;
-    if (unit === 'days') stepCount = stepsPerDay * val;
-    else if (unit === 'hours') stepCount = Math.max(1, Math.floor(stepsPerDay * val / 24));
-    else if (unit === 'minutes') stepCount = Math.max(1, Math.floor(val / stepMin));
-    else if (unit === 'seconds') stepCount = Math.max(1, Math.floor(val / (stepMin * 60)));
+    const stepMin = parseInt(document.getElementById('fineStepMinutes').value, 10) || 180;
+    const stepsPerDay = stepMin === 5 ? 288 : stepMin === 15 ? 96 : stepMin === 60 ? 24 : stepMin === 120 ? 12 : stepMin === 180 ? 8 : 48;
+    const endDateEl = document.getElementById('endDate');
+    const endDateStr = endDateEl && endDateEl.value ? endDateEl.value.trim() : '';
+
+    let stepCount;
+    if (endDateStr) {
+      // 指定了结束日期：先取当前 sim 时间，从当前日期跑到 end_date（含）的天数 × stepsPerDay
+      try {
+        const nowR = await fetch(base + '/now');
+        const nowD = await nowR.json();
+        const nowIso = (nowD.now || '').slice(0, 10);
+        if (!nowIso) { showMsg('Could not get current sim time', true); return; }
+        const start = new Date(nowIso + 'T12:00:00Z');
+        const end = new Date(endDateStr + 'T12:00:00Z');
+        const diffDays = Math.round((end - start) / 86400000);
+        const days = Math.max(1, diffDays + 1); // inclusive: from current date through end_date
+        stepCount = stepsPerDay * days;
+      } catch (e) {
+        showMsg('Failed to get sim time for end date: ' + e.message, true);
+        return;
+      }
+    } else {
+      stepCount = stepsPerDay;
+      if (unit === 'days') stepCount = stepsPerDay * val;
+      else if (unit === 'hours') stepCount = Math.max(1, Math.floor(stepsPerDay * val / 24));
+      else if (unit === 'minutes') stepCount = Math.max(1, Math.floor(val / stepMin));
+      else if (unit === 'seconds') stepCount = Math.max(1, Math.floor(val / (stepMin * 60)));
+    }
     body = { minutes: stepMin, steps: stepCount, snap_to_boundary: true };
+    if (endDateStr) body.end_date = endDateStr;
   } else {
     body = { [unit]: val };
   }

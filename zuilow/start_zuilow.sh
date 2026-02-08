@@ -3,8 +3,14 @@
 
 cd "$(dirname "$0")"
 
+# Use a single .pycache directory under project root
+export PYTHONPYCACHEPREFIX="$(pwd)/.pycache"
+
 # Add parent directory to PYTHONPATH so 'zuilow' can be imported as a package
 export PYTHONPATH="$(pwd)/..:$PYTHONPATH"
+
+#export DMS_API_KEY="your-shared-secret"
+#export WEBHOOK_TOKEN="sim_webhook_shared_token"
 
 # Activate conda environment
 if [ -f ~/anaconda3/etc/profile.d/conda.sh ]; then
@@ -22,9 +28,6 @@ echo "Access URL: http://0.0.0.0:11180"
 echo "Futu Panel: http://0.0.0.0:11180/futu"
 echo "Scheduler: http://0.0.0.0:11180/scheduler"
 echo ""
-
-# Use a single .pycache directory under project root
-export PYTHONPYCACHEPREFIX="$(pwd)/.pycache"
 
 # Start Flask
 python app.py

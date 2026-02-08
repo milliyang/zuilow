@@ -101,7 +101,7 @@ class SignalExecutor:
             else:
                 ok = False
                 if sig.id:
-                    store.update_status(sig.id, SignalStatus.FAILED)
+                    store.update_status(sig.id, SignalStatus.FAILED, error_message=f"Unknown signal kind: {sig.kind}")
                 logger.warning("Unknown signal kind: %s", sig.kind)
             if ok:
                 executed += 1
@@ -123,17 +123,17 @@ class SignalExecutor:
         Returns:
             True if order succeeded (HTTP 200), else False (status set to FAILED)
         """
-        if not signal.symbol or signal.kind != SignalKind.ORDER:
+        def _fail(msg: str) -> bool:
             if signal.id:
-                store.update_status(signal.id, SignalStatus.FAILED)
+                store.update_status(signal.id, SignalStatus.FAILED, error_message=msg[:500] if msg else None)
             return False
+        if not signal.symbol or signal.kind != SignalKind.ORDER:
+            return _fail("Invalid signal: missing symbol or not order kind")
         payload = signal.payload
         side = (payload.get("side") or "buy").lower()
         qty = float(payload.get("qty", 0))
         if qty <= 0:
-            if signal.id:
-                store.update_status(signal.id, SignalStatus.FAILED)
-            return False
+            return _fail("Invalid payload: qty <= 0")
         body: dict[str, Any] = {
             "symbol": signal.symbol,
             "side": side,
@@ -151,12 +151,12 @@ class SignalExecutor:
                     store.update_status(signal.id, SignalStatus.EXECUTED, executed_at=trigger_at or get_current_dt())
                 logger.info(f"Executed order signal id={signal.id} {signal.symbol} {side} {qty}")
                 return True
+            err = f"Order API {r.status_code}: {r.text[:300]}"
             logger.warning(f"Order API returned {r.status_code}: {r.text}")
+            return _fail(err)
         except Exception as e:
             logger.error(f"Execute order failed: {e}")
-        if signal.id:
-            store.update_status(signal.id, SignalStatus.FAILED)
-        return False
+            return _fail(str(e)[:500])
 
     def _execute_rebalance(self, signal: TradingSignal, store: Any, trigger_at: Optional[datetime] = None) -> bool:
         """
@@ -174,18 +174,18 @@ class SignalExecutor:
         Returns:
             True if all orders succeeded, else False (signal status set to EXECUTED or FAILED)
         """
-        if signal.kind not in (SignalKind.REBALANCE, SignalKind.ALLOCATION):
+        def _fail(msg: str) -> bool:
             if signal.id:
-                store.update_status(signal.id, SignalStatus.FAILED)
+                store.update_status(signal.id, SignalStatus.FAILED, error_message=msg[:500] if msg else None)
             return False
+        if signal.kind not in (SignalKind.REBALANCE, SignalKind.ALLOCATION):
+            return _fail("Invalid signal: not rebalance/allocation kind")
         payload = signal.payload
         target_weights = payload.get("target_weights")  # { symbol: weight 0..1 }
         target_mv = payload.get("target_mv")            # { symbol: target_market_value }
         if not target_weights and not target_mv:
             logger.warning("Rebalance payload missing target_weights or target_mv")
-            if signal.id:
-                store.update_status(signal.id, SignalStatus.FAILED)
-            return False
+            return _fail("Payload missing target_weights or target_mv")
         logger.info(
             "Executing rebalance signal job_name=%s account=%s market=%s (target_weights=%s target_mv=%s)",
             signal.job_name, signal.account, signal.market,
@@ -195,13 +195,9 @@ class SignalExecutor:
             equity, positions = self._fetch_account_positions(signal.account)
         except Exception as e:
             logger.error(f"Fetch account failed: {e}")
-            if signal.id:
-                store.update_status(signal.id, SignalStatus.FAILED)
-            return False
+            return _fail(f"Fetch account failed: {str(e)[:400]}")
         if equity <= 0:
-            if signal.id:
-                store.update_status(signal.id, SignalStatus.FAILED)
-            return False
+            return _fail("Account equity <= 0")
         current = {}
         for p in positions:
             sym = p.get("symbol", "")
@@ -224,6 +220,7 @@ class SignalExecutor:
                 target_qty[sym] = (float(mv) / price) if price > 0 else 0
         all_symbols = set(current.keys()) | set(target_qty.keys())
         ok = True
+        first_error: str | None = None
         for symbol in all_symbols:
             cur_q = current.get(symbol, {}).get("qty", 0) or 0
             tgt_q = target_qty.get(symbol, 0) or 0
@@ -232,10 +229,12 @@ class SignalExecutor:
                 continue
             side = "buy" if diff > 0 else "sell"
             qty = abs(diff)
+            # 下游 /api/order 用 int(qty)，小数会变成 0 被拒；发整数股数，至少 1
+            qty_int = max(1, int(round(qty, 0)))
             body: dict[str, Any] = {
                 "symbol": symbol,
                 "side": side,
-                "qty": round(qty, 4),
+                "qty": qty_int,
                 "account": signal.account,
             }
             try:
@@ -246,15 +245,20 @@ class SignalExecutor:
                 )
                 if r.status_code != 200:
                     ok = False
+                    if first_error is None:
+                        first_error = f"Order {symbol} {side}: {r.status_code} {r.text[:200]}"
                     logger.warning(f"Rebalance order {symbol} {side} {qty} -> {r.status_code}")
             except Exception as e:
-                logger.error(f"Rebalance order failed: {e}")
                 ok = False
+                if first_error is None:
+                    first_error = f"Order {symbol} failed: {str(e)[:300]}"
+                logger.error(f"Rebalance order failed: {e}")
         if signal.id:
             store.update_status(
                 signal.id,
                 SignalStatus.EXECUTED if ok else SignalStatus.FAILED,
                 executed_at=(trigger_at or get_current_dt()) if ok else None,
+                error_message=None if ok else (first_error or "Rebalance had failures")[:500],
             )
         return ok
 

@@ -30,9 +30,9 @@ dms:
     type: influxdb1              # Database type
     # For Docker Compose internal InfluxDB, use service name "influxdb"
     # For external InfluxDB, use IP address or hostname
-    #host: "influxdb"             # Docker service name (when using docker-compose) or external IP
+    host: "influxdb"             # Docker service name (when using docker-compose) or external IP
     #host: "172.19.202.120"    # External InfluxDB IP (uncomment to use external DB)
-    host: one4090
+    #host: one4090
     port: 8086                   # Database port
     database: "dms_data"         # Database name
     username: ""                 # Username (empty if not required, set if INFLUXDB_HTTP_AUTH_ENABLED=true)

@@ -105,9 +105,43 @@ class StrategyRunner:
         logger.info(f"Loaded strategy config: {config_path}")
         return config
 
+    def get_strategy_config(self, strategy_name: str, config_path: Optional[str] = None) -> dict:
+        """
+        Get config for a strategy: from YAML file if config_path is given and exists,
+        otherwise from strategy's init_config() (in-code defaults).
+
+        Args:
+            strategy_name: Strategy class name (e.g. SMAStrategy)
+            config_path: Optional path relative to config/ (e.g. strategies/sma_daily.yaml)
+
+        Returns:
+            Config dict; config["params"] is passed to strategy constructor
+        """
+        module = importlib.import_module("zuilow.strategies")
+        strategy_class = getattr(module, strategy_name)
+        base = {}
+        if hasattr(strategy_class, "init_config") and callable(getattr(strategy_class, "init_config")):
+            base = strategy_class.init_config() or {}
+        path = (config_path or "").strip()
+        if path:
+            config_dir = Path(__file__).parent.parent.parent / "config"
+            full_path = config_dir / path
+            if full_path.exists():
+                with open(full_path, "r", encoding="utf-8") as f:
+                    loaded = yaml.safe_load(f) or {}
+                # File overrides in-code defaults
+                merged = {**base}
+                for k, v in loaded.items():
+                    if k == "params" and isinstance(v, dict) and isinstance(merged.get("params"), dict):
+                        merged["params"] = {**merged.get("params", {}), **v}
+                    else:
+                        merged[k] = v
+                return merged
+        return base
+
     def create_strategy(self, strategy_name: str, config: dict) -> Any:
         """
-        Create strategy instance from zuilow.components.strategy.
+        Create strategy instance from zuilow.strategies.
 
         Args:
             strategy_name: Class name (e.g. SMAStrategy)
@@ -120,7 +154,7 @@ class StrategyRunner:
             ImportError, AttributeError: If class not found or load fails
         """
         try:
-            module = importlib.import_module("zuilow.components.strategy")
+            module = importlib.import_module("zuilow.strategies")
             strategy_class = getattr(module, strategy_name)
             params = config.get("params", {})
             strategy = strategy_class(**params)
@@ -136,6 +170,8 @@ class StrategyRunner:
         symbols: list[str],
         mode: str = "paper",
         account: Optional[str] = None,
+        job_name: Optional[str] = None,
+        market: Optional[str] = None,
     ) -> list[dict]:
         """
         Run strategy for given symbols; produce signal dicts.
@@ -145,12 +181,16 @@ class StrategyRunner:
             symbols: List of symbols (e.g. ["HK.00700"])
             mode: paper | live
             account: Optional account name so quote API uses same gateway (avoid wrong broker).
+            job_name: Optional job name (for strategies that check pending/schedule, e.g. grl_5d_topk_reg).
+            market: Optional market code (e.g. US, HK).
 
         Returns:
             List of signal dicts (each has symbol, side, qty, etc. or target_weights/target_mv)
         """
         if hasattr(strategy, "get_rebalance_output"):
-            rb = strategy.get_rebalance_output()
+            rb = strategy.get_rebalance_output(
+                job_name=job_name, account=account, market=market
+            )
             if rb:
                 rb = dict(rb)
                 rb["mode"] = mode
@@ -328,11 +368,12 @@ class StrategyRunner:
         """
         out: list[TradingSignal] = []
         for s in signals:
-            # Allocation (资产配置): target_weights only
+            # Allocation (资产配置): target_weights + 策略元数据（以下划线开头的键通用透传进 payload）
             if s.get("kind") == "allocation" and "target_weights" in s:
                 m = market or (s.get("market") or "UNKNOWN")
                 tw = s["target_weights"]
                 if isinstance(tw, dict) and tw:
+                    payload_extra = {k: v for k, v in s.items() if k.startswith("_")}
                     ts = TradingSignal.allocation(
                         job_name=job_name,
                         account=account,
@@ -340,6 +381,7 @@ class StrategyRunner:
                         target_weights=tw,
                         trigger_at=trigger_at,
                         created_at=trigger_at,
+                        **payload_extra,
                     )
                     out.append(ts)
                 continue

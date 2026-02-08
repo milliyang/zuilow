@@ -7,7 +7,7 @@ computes performance. Paper trading uses separate PPT (Paper Trade) service.
 Classes:
     Bar, Signal, SignalType, Order, OrderSide, OrderType, OrderStatus,
     Position, Trade, Account   Types; see types.py
-    Strategy, StrategyContext, BuyAndHold, SMAStrategy, RSIStrategy   Strategies; see strategy.py
+    Strategy, StrategyContext   Strategies; concrete strategies from zuilow.strategies
     BacktestEngine, BacktestConfig, BacktestResult   Engine; see engine.py
     BacktestMetrics, calculate_metrics   Metrics; see metrics.py
     SimulatedBroker, BrokerConfig, FillMode   Simulated broker; see broker.py
@@ -29,13 +29,11 @@ from .types import (
 )
 
 from .strategy import Strategy, StrategyContext
-from zuilow.components.strategy import (
-    Bull5dRandom,
-    BuyAndHold,
-    RSIStrategy,
-    RebalanceAfterClose,
-    SMAStrategy,
-)
+# Re-export all strategies discovered by zuilow.strategies (no need to list each one)
+import zuilow.strategies as _strategy_pkg
+_strategy_export = [n for n in getattr(_strategy_pkg, "__all__", []) if n not in ("Strategy", "StrategyContext")]
+for _n in _strategy_export:
+    globals()[_n] = getattr(_strategy_pkg, _n)
 
 from .engine import (
     BacktestEngine,
@@ -76,14 +74,10 @@ __all__ = [
     "Position",
     "Trade",
     "Account",
-    # Strategy
+    # Strategy (from zuilow.strategies discovery)
     "Strategy",
     "StrategyContext",
-    "Bull5dRandom",
-    "BuyAndHold",
-    "SMAStrategy",
-    "RSIStrategy",
-    "RebalanceAfterClose",
+    *_strategy_export,
     # Engine
     "BacktestEngine",
     "BacktestConfig",

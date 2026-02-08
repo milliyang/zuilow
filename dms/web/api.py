@@ -102,7 +102,9 @@ def get_all_nodes():
     if _dms_instance is None:
         abort(503, description="DMS not initialized")
     
-    return jsonify(_dms_instance.get_all_nodes_status())
+    data = _dms_instance.get_all_nodes_status()
+    data["webhook_token"] = DMS_API_KEY
+    return jsonify(data)
 
 
 @bp.route("/sync/status", methods=["GET"])

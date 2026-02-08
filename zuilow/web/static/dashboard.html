@@ -42,6 +42,18 @@
             padding: 5px 12px;
             font-size: 12px;
         }
+        #trades-pagination {
+            font-size: 11px;
+            color: #8b949e;
+        }
+        #trades-pagination button {
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+        #trades-pagination select {
+            padding: 2px 6px;
+            font-size: 11px;
+        }
     </style>
 </head>
 <body>
@@ -89,15 +101,15 @@
         
         <div class="card">
             <div class="card-title">Positions</div>
-            <table>
+            <table class="dashboard-table positions-table">
                 <thead>
                     <tr>
                         <th>Symbol</th>
-                        <th>Qty</th>
-                        <th>Avg</th>
-                        <th>Price</th>
-                        <th>Value</th>
-                        <th>PnL</th>
+                        <th class="num">Qty</th>
+                        <th class="num">Avg</th>
+                        <th class="num">Price</th>
+                        <th class="num">Value</th>
+                        <th class="num">PnL</th>
                     </tr>
                 </thead>
                 <tbody id="positions"></tbody>
@@ -105,32 +117,36 @@
         </div>
         
         <div class="card">
-            <div class="card-title">Recent Trades</div>
-            <table>
+            <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <span>Recent Trades</span>
+                <div class="pagination" id="trades-pagination" style="display:none; margin:0;">
+                    <button type="button" id="trades-first" onclick="tradesFirst()">First</button>
+                    <button type="button" id="trades-prev" onclick="tradesPrev()">Prev</button>
+                    <span id="trades-page-info">Page 1 of 1</span>
+                    <button type="button" id="trades-next" onclick="tradesNext()">Next</button>
+                    <button type="button" id="trades-last" onclick="tradesLast()">Last</button>
+                    <span>Per page</span>
+                    <select id="trades-limit" onchange="tradesGoPage(1); loadTrades();">
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    <span id="trades-total-info">Total: 0</span>
+                </div>
+            </div>
+            <table class="dashboard-table trades-table">
                 <thead>
                     <tr>
                         <th>Time</th>
                         <th>Symbol</th>
                         <th>Side</th>
-                        <th>Qty</th>
-                        <th>Price</th>
-                        <th>Amount</th>
+                        <th class="num">Qty</th>
+                        <th class="num">Price</th>
+                        <th class="num">Amount</th>
                     </tr>
                 </thead>
                 <tbody id="trades"></tbody>
             </table>
-            <div class="pagination" id="trades-pagination" style="display:none; margin-top:10px;">
-                <button type="button" id="trades-prev" onclick="tradesPrev()">Prev</button>
-                <span id="trades-page-info">Page 1 of 1</span>
-                <button type="button" id="trades-next" onclick="tradesNext()">Next</button>
-                <span>Per page</span>
-                <select id="trades-limit" onchange="tradesGoPage(1); loadTrades();">
-                    <option value="20" selected>20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
-                <span id="trades-total-info">Total: 0</span>
-            </div>
         </div>
         
         <div id="status" style="font-size:11px; color:#8b949e; margin-top:12px;"></div>
@@ -155,8 +171,10 @@
         }
 
         function tradesGoPage(p) { tradesPage = Math.max(1, p); }
+        function tradesFirst() { tradesGoPage(1); loadTrades(); }
         function tradesPrev() { tradesGoPage(tradesPage - 1); loadTrades(); }
         function tradesNext() { tradesGoPage(tradesPage + 1); loadTrades(); }
+        function tradesLast() { tradesGoPage(999999); loadTrades(); }
 
         async function loadTrades() {
             if (!selectedAccount) return;
@@ -165,27 +183,34 @@
                 const data = await apiRequest('/api/trades?account=' + encodeURIComponent(selectedAccount) + '&page=' + tradesPage + '&limit=' + limit);
                 const list = data.trades || [];
                 const total = data.total != null ? data.total : 0;
-                const page = data.page != null ? data.page : 1;
+                let page = data.page != null ? data.page : 1;
                 const limitResp = data.limit != null ? data.limit : limit;
-                tradesPage = page;
                 const totalPages = Math.max(1, Math.ceil(total / limitResp));
+                if (tradesPage > totalPages) { tradesPage = totalPages; loadTrades(); return; }
+                tradesPage = page;
                 const tbody = document.getElementById('trades');
-                tbody.innerHTML = list.map(t => `
+                tbody.innerHTML = list.map(t => {
+                    const q = t.quantity != null ? t.quantity : (t.qty != null ? t.qty : '--');
+                    const amt = t.value != null ? t.value : ((t.quantity != null ? t.quantity : t.qty || 0) * (t.price || 0)) || 0;
+                    return `
                     <tr>
                         <td>${formatTradeTime(t.timestamp)}</td>
                         <td>${t.symbol || '--'}</td>
-                        <td><span class="tag ${t.side}">${t.side === 'buy' ? 'Buy' : 'Sell'}</span></td>
-                        <td>${t.quantity != null ? t.quantity : '--'}</td>
-                        <td>${formatMoney(t.price)}</td>
-                        <td>${formatMoney(t.value != null ? t.value : (t.quantity * t.price) || 0)}</td>
+                        <td><span class="tag ${(t.side || '').toLowerCase()}">${(t.side || '').toLowerCase() === 'sell' ? 'Sell' : 'Buy'}</span></td>
+                        <td class="num">${q}</td>
+                        <td class="num">${formatMoney(t.price)}</td>
+                        <td class="num">${formatMoney(amt)}</td>
                     </tr>
-                `).join('') || '<tr><td colspan="6">No trades</td></tr>';
+                `;
+                }).join('') || '<tr><td colspan="6">No trades</td></tr>';
                 const bar = document.getElementById('trades-pagination');
                 bar.style.display = 'flex';
                 document.getElementById('trades-page-info').textContent = 'Page ' + page + ' of ' + totalPages;
                 document.getElementById('trades-total-info').textContent = 'Total: ' + total;
+                document.getElementById('trades-first').disabled = page <= 1;
                 document.getElementById('trades-prev').disabled = page <= 1;
                 document.getElementById('trades-next').disabled = page >= totalPages;
+                document.getElementById('trades-last').disabled = page >= totalPages;
             } catch (e) {
                 document.getElementById('trades').innerHTML = '<tr><td colspan="6">Error loading</td></tr>';
                 document.getElementById('trades-pagination').style.display = 'none';
@@ -246,16 +271,22 @@
                 pnlEl.textContent = formatPnl(acc.pnl || 0, acc.pnl_pct || 0);
                 pnlEl.className = 'card-value ' + ((acc.pnl || 0) >= 0 ? 'positive' : 'negative');
                 let positions = acc.positions || [];
-                const posHtml = positions.map(p => `
+                const posHtml = positions.map(p => {
+                    const qty = p.quantity != null ? p.quantity : (p.qty != null ? p.qty : 0);
+                    const avg = p.avg_price != null ? p.avg_price : 0;
+                    const price = p.current_price != null ? p.current_price : avg;
+                    const value = p.market_value != null ? p.market_value : (qty * price);
+                    return `
                     <tr>
-                        <td>${p.symbol}</td>
-                        <td>${p.quantity}</td>
-                        <td>${formatMoney(p.avg_price)}</td>
-                        <td>${formatMoney(p.current_price)}</td>
-                        <td>${formatMoney(p.market_value)}</td>
-                        <td class="${(p.pnl || 0) >= 0 ? 'positive' : 'negative'}">${formatPnl(p.pnl || 0, p.pnl_pct || 0)}</td>
+                        <td>${p.symbol || '--'}</td>
+                        <td class="num">${qty}</td>
+                        <td class="num">${formatMoney(avg)}</td>
+                        <td class="num">${formatMoney(price)}</td>
+                        <td class="num">${formatMoney(value)}</td>
+                        <td class="num ${(p.pnl || 0) >= 0 ? 'positive' : 'negative'}">${formatPnl(p.pnl, p.pnl_pct)}</td>
                     </tr>
-                `).join('');
+                `;
+                }).join('');
                 document.getElementById('positions').innerHTML = posHtml || '<tr><td colspan="6">No positions</td></tr>';
                 tradesPage = 1;
                 await loadTrades();

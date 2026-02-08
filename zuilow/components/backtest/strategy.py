@@ -7,8 +7,7 @@ Classes:
                      on_start(ctx), on_end(ctx), on_order_filled(order, ctx);
                      on_market_open(ctx), on_open_bar(ctx, bar), on_time(ctx, t) -> list[Signal] | None (optional)
 
-Concrete strategies (BuyAndHold, SMAStrategy, RSIStrategy, RebalanceAfterClose) live in
-zuilow.components.strategy and are re-exported here for backward compatibility.
+Concrete strategies live in zuilow.strategies (top-level); backtest re-exports them from there.
 """
 
 from __future__ import annotations
@@ -43,8 +42,17 @@ class Strategy(ABC):
     Strategy base class.
 
     All strategies must inherit this and implement on_bar.
-
+    Override init_config() to provide default config (params, etc.) so scheduler does not require a YAML file.
     """
+
+    @classmethod
+    def init_config(cls) -> dict:
+        """
+        Default config for this strategy (params passed to constructor).
+        Override in subclass so scheduler can run without a separate config file.
+        Returns dict with at least "params" (kwargs for __init__); may include "description", etc.
+        """
+        return {}
 
     def __init__(self, name: str = "Strategy"):
         self.name = name

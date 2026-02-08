@@ -31,6 +31,8 @@ except ImportError:
 
 from .base import Writer
 
+from ...core.symbol import normalize_symbol
+
 logger = logging.getLogger(__name__)
 
 
@@ -221,6 +223,7 @@ class InfluxDBWriter(Writer):
             logger.warning(f"Data is empty for {symbol}")
             return False
         
+        symbol = normalize_symbol(symbol)
         try:
             # Prepare data points
             points = []
@@ -287,6 +290,7 @@ class InfluxDBWriter(Writer):
             logger.error("Not connected to InfluxDB")
             return None
         
+        symbol = normalize_symbol(symbol)
         try:
             # Sanitize inputs to prevent injection (InfluxDB uses single quotes)
             safe_symbol = symbol.replace("'", "''").replace("\\", "\\\\")

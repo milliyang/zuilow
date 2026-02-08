@@ -38,7 +38,18 @@ _up() {
     _write_repo_root
     # 宿主机 run/ 用于挂载 zuilow/ppt/stime 的 run 目录，便于看 log
     (cd "$SCRIPT_DIR" && mkdir -p run/zuilow run/ppt run/stime)
+    # 提示 nn 挂载：zuilow 的 GRL 策略需要 nn 目录，REPO_ROOT/../nn -> /workspace/nn
+    if [ -n "$REPO_ROOT" ]; then
+        NN_DIR="$(cd "$REPO_ROOT/.." 2>/dev/null && pwd -L)/nn"
+        if [ ! -d "$NN_DIR" ]; then
+            echo "Note: nn not found at $NN_DIR (REPO_ROOT=$REPO_ROOT). GRL strategy will skip in zuilow."
+        elif [ ! -f "$NN_DIR/grl/checkpoints/us_daily_5d_topk_reg/best_model.pth" ]; then
+            echo "Note: nn mounted but best_model.pth missing at $NN_DIR/grl/checkpoints/us_daily_5d_topk_reg/. GRL strategy will skip."
+        fi
+    fi
     echo "Starting stime, zuilow, ppt..."
+    # DOCKER_BUILDKIT=1 使 Dockerfile 中 pip 的 cache mount 生效，避免每次构建都从网络下载（如 torch）
+    export DOCKER_BUILDKIT=1
     REPO_ROOT="$REPO_ROOT" docker compose up -d --build --remove-orphans
     echo ""
     echo "=== Full-stack simulation is running ==="

@@ -19,23 +19,22 @@
     </div>
 
     <div class="grid">
-        <div class="card">
+        <div class="card card-overview card-overview-tall">
             <h2>Account Overview</h2>
-            <div class="value" id="total-value">$0</div>
-            <div class="label">Total Assets</div>
-            <div class="stats-grid">
-                <div class="stat-item"><div class="label">Cash</div><div class="stat-value" id="cash">$0</div></div>
-                <div class="stat-item"><div class="label">Position Value</div><div class="stat-value" id="position-value">$0</div></div>
-                <div class="stat-item"><div class="label">P&amp;L</div><div class="stat-value" id="pnl">$0</div></div>
-                <div class="stat-item"><div class="label">Return %</div><div class="stat-value" id="pnl-pct">0%</div></div>
+            <div class="overview-total"><span class="overview-total-label">Total Assets</span><span class="overview-total-value" id="total-value">$0</span></div>
+            <div class="overview-rows">
+                <div class="overview-row"><span class="overview-label">Cash</span><span class="overview-value" id="cash">$0</span></div>
+                <div class="overview-row"><span class="overview-label">Position Value</span><span class="overview-value" id="position-value">$0</span></div>
+                <div class="overview-row"><span class="overview-label">P&amp;L</span><span class="overview-value" id="pnl">$0</span></div>
+                <div class="overview-row"><span class="overview-label">Return %</span><span class="overview-value" id="pnl-pct">0%</span></div>
+                <div class="overview-row"><span class="overview-label">Unrealized (positions)</span><span class="overview-value" id="unrealized-pnl">$0</span></div>
             </div>
-            <div class="cost-stats" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:12px;color:#8b949e;">
-                <div class="label">Cost breakdown</div>
-                <div class="stats-grid" style="margin-top:4px;">
-                    <div class="stat-item"><div class="label">Commission</div><div class="stat-value negative" id="cost-commission">$0</div></div>
-                    <div class="stat-item"><div class="label">Slippage</div><div class="stat-value negative" id="cost-slippage">$0</div></div>
-                    <div class="stat-item"><div class="label">Realized P&amp;L</div><div class="stat-value" id="cost-realized">$0</div></div>
-                </div>
+            <div class="overview-divider"></div>
+            <div class="overview-rows overview-costs">
+                <div class="overview-row"><span class="overview-label">Commission</span><span class="overview-value negative" id="cost-commission">$0</span></div>
+                <div class="overview-row"><span class="overview-label">Slippage</span><span class="overview-value negative" id="cost-slippage">$0</span></div>
+                <div class="overview-row"><span class="overview-label">Realized P&amp;L</span><span class="overview-value" id="cost-realized">$0</span></div>
+                <div class="overview-row overview-row-net"><span class="overview-label">Net (after costs)</span><span class="overview-value" id="cost-net">$0</span></div>
             </div>
         </div>
 
@@ -55,38 +54,35 @@
             </div>
         </div>
 
+        <div class="card card-simulation">
+            <h2>Simulation</h2>
+            <div id="simulation-config">
+                <div class="sim-col">
+                    <div class="sim-row"><span class="label">Preset</span><span id="sim-preset" class="sim-val" style="color:#58a6ff;"></span></div>
+                    <div class="sim-row"><span class="label">Slippage:</span><span id="sim-slippage" class="sim-val">-</span></div>
+                    <div class="sim-row"><span class="label">Commission:</span><span id="sim-commission" class="sim-val">-</span></div>
+                    <div class="sim-row"><span class="label">Partial fill:</span><span id="sim-partial" class="sim-val">-</span></div>
+                </div>
+                <div class="sim-col">
+                    <div class="sim-row"><span class="label">Latency:</span><span id="sim-latency" class="sim-val">-</span></div>
+                    <div class="sim-row"><span class="label">Config:</span><span class="sim-val">config/simulation.yaml <button class="export-btn" onclick="loadSimulation()">&#x1F504;</button></span></div>
+                    <div class="sim-row admin-only"><span class="label">Webhook Token:</span><span class="sim-val"><code id="webhook-token" style="font-size:10px;background:#161b22;padding:2px 6px;border-radius:3px;word-break:break-all;">-</code> <button class="export-btn" onclick="copyToken()" title="Copy">&#x1F4CB;</button></span></div>
+                </div>
+            </div>
+        </div>
+
         <div class="card">
             <h2>Positions <button class="export-btn" onclick="loadPositionsRealtime()">&#x1F504; Realtime</button></h2>
             <table class="positions-table">
                 <thead><tr><th>Symbol</th><th class="num">Qty</th><th class="num">Cost</th><th class="num">Price</th><th class="num">P&amp;L</th><th class="num">P&amp;L %</th></tr></thead>
                 <tbody id="positions-body"></tbody>
             </table>
-            <div id="positions-summary" style="margin-top:8px;font-size:11px;color:#8b949e;"></div>
+            <div id="positions-summary" class="positions-summary"></div>
         </div>
         
-        <div class="card">
+        <div class="card card-trades">
             <h2>Recent Trades <a href="/api/export/trades" class="export-btn">&#x2193; CSV</a></h2>
             <div class="trades" id="trades-list"></div>
-        </div>
-        
-        <div class="card">
-            <h2>Simulation <span id="sim-preset" style="font-size:10px;color:#58a6ff;margin-left:8px;"></span></h2>
-            <div id="simulation-config" style="font-size: 11px;">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                    <div><span class="label">Slippage:</span> <span id="sim-slippage">-</span></div>
-                    <div><span class="label">Commission:</span> <span id="sim-commission">-</span></div>
-                    <div><span class="label">Partial fill:</span> <span id="sim-partial">-</span></div>
-                    <div><span class="label">Latency:</span> <span id="sim-latency">-</span></div>
-                </div>
-                <div style="margin-top:8px;color:#8b949e;font-size:10px;">
-                    config/simulation.yaml <button class="export-btn" onclick="loadSimulation()">&#x1F504;</button>
-                </div>
-                <div class="admin-only" style="margin-top:10px;padding-top:8px;border-top:1px solid #21262d;">
-                    <span class="label">Webhook Token:</span>
-                    <code id="webhook-token" style="font-size:10px;background:#161b22;padding:2px 6px;border-radius:3px;margin-left:4px;word-break:break-all;">-</code>
-                    <button class="export-btn" onclick="copyToken()" title="Copy">&#x1F4CB;</button>
-                </div>
-            </div>
         </div>
 
         <div class="card" style="grid-column: span 2;">
@@ -149,30 +145,6 @@
             </div>
         </div>
 
-        <div class="card" style="grid-column: span 2;">
-            <h2>Position Analysis</h2>
-            <div style="font-size: 11px;">
-                <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
-                    <div class="stat-item">
-                        <div class="label"># Positions</div>
-                        <div class="stat-value" id="pos-count">-</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="label">Position %</div>
-                        <div class="stat-value" id="pos-pct">-</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="label">Top 1</div>
-                        <div class="stat-value" id="top1-pct">-</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="label">HHI</div>
-                        <div class="stat-value" id="hhi">-</div>
-                    </div>
-                </div>
-                <div id="position-bars" style="margin-top:10px;"></div>
-            </div>
-        </div>
     </div>
     
     <div id="footer-time" style="font-size:11px;color:#8b949e;margin:12px 16px;"></div>

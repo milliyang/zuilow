@@ -47,6 +47,7 @@ class TriggerType(Enum):
     INTERVAL = "interval"
     EVENT = "event"
     MARKET_OPEN = "market_open"   # Execute pending signals at market open
+    MARKET_CLOSE = "market_close"  # Execute pending signals at market close
     OPEN_BAR = "open_bar"         # Execute at bar boundary (interval)
     AT_TIME = "at_time"          # Execute pending at fixed time (cron-like)
 
@@ -89,23 +90,27 @@ class IntervalTrigger:
     Attributes:
         minutes: Interval in minutes (optional)
         hours: Interval in hours (optional)
+        days: Interval in days (optional)
         start_time: Optional time window start
         end_time: Optional time window end
     """
     minutes: Optional[int] = None
     hours: Optional[int] = None
+    days: Optional[int] = None
     start_time: Optional[time] = None
     end_time: Optional[time] = None
 
     def __post_init__(self):
-        if not self.minutes and not self.hours:
-            raise ValueError("Must specify minutes or hours")
+        if not self.minutes and not self.hours and not self.days:
+            raise ValueError("Must specify minutes, hours, or days")
         self.interval_seconds = 0
         if self.minutes:
             self.interval_seconds += self.minutes * 60
         if self.hours:
             self.interval_seconds += self.hours * 3600
-        
+        if self.days:
+            self.interval_seconds += self.days * 86400
+
         self._last_run: Optional[datetime] = None
 
     def should_run(self, now: datetime, last_run: Optional[datetime] = None) -> bool:
@@ -149,6 +154,7 @@ class MarketOpenTrigger:
     timezone: Optional[str] = None  # From config; if empty, UTC
 
     def should_run(self, now: datetime) -> bool:
+        """Only run at market open/close time and only on weekdays (Mon–Fri). Weekend does not consume signals."""
         try:
             from zoneinfo import ZoneInfo
             tz_name = (self.timezone or "").strip() or "UTC"
@@ -156,6 +162,8 @@ class MarketOpenTrigger:
                 now = now.replace(tzinfo=timezone.utc)
             tz = ZoneInfo(tz_name)
             now_local = now.astimezone(tz)
+            if now_local.weekday() >= 5:
+                return False
             parts = self.time_str.strip().split(":")
             h = int(parts[0]) if len(parts) > 0 else 9
             m = int(parts[1]) if len(parts) > 1 else 30

@@ -27,6 +27,12 @@ The **single source of “current time”** in the full-stack simulation environ
 
 ---
 
+### 60-minute step and market open/close
+
+When using fine-grained step with **60 min** and snap-to-boundary, set env `MARKET_OPEN_TIME` (e.g. `09:30`), `MARKET_CLOSE_TIME` (e.g. `16:00`), `MARKET_TIMEZONE` (e.g. `America/New_York`) to insert one extra tick at open and one at close when a 60-min step would skip them. If unset, no extra ticks.
+
+---
+
 ### Serial wait (important)
 
 Each step **waits for ZuiLow’s tick response** before the next step, so:

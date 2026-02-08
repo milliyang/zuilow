@@ -1,34 +1,66 @@
 """
-Simulation Time Service: single source of "current time" for full-stack simulation.
+Simulation Time Service: single source of "current time" for full-stack simulation (ZuiLow, PPT, etc.).
+
+Used for: sim mode; ZuiLow and PPT fetch GET /now or receive X-Simulation-Time on tick so all use the same sim clock.
 
 API:
-  GET  /now     -> {"now": "2024-01-15T09:35:00Z"} (ISO 8601 UTC)
-  POST /set     body {"now": "2024-01-15T09:35:00Z"}
-  POST /advance body {"seconds": 300} or {"minutes": 5} or {"days": 1}
+    GET  /now                      -> {"now": "ISO8601 UTC"}
+    POST /set                      body {"now": "ISO8601 UTC"}
+    POST /advance                  body {"days"|"hours"|"minutes"|"seconds": N}
+    POST /advance-and-tick         body e.g. {"minutes": 120, "steps": 12, "snap_to_boundary": true}; 202, poll /status
+    GET  /advance-and-tick/status  -> running, steps_done, steps_total, executed_total, now
+    POST /advance-and-tick/cancel  cancel running job
+    POST /config                   override tick_urls, tick_timeout (optional)
 
-All times stored and returned in UTC. Web UI at /.
-
-Step & trigger (UI "Advance + Trigger ZuiLow tick"): The UI runs N steps (e.g. N days).
-Each step: POST /advance (1 unit) -> POST zuilow /api/scheduler/tick -> **wait for response**
-before the next step. So ZuiLow always sees the correct sim-time for that step; no race
-where sim-time jumps ahead while ZuiLow is still processing.
+Features:
+    - All times in UTC; default sim time set by DEFAULT_SIM_* at top of file.
+    - Advance-and-tick: each step advances time then POSTs to TICK_URLS (e.g. ZuiLow then PPT) with X-Simulation-Time; first URL failure aborts.
+    - With 60/120/180 min step, extra tick at market open/close when crossed (if MARKET_OPEN_TIME/MARKET_CLOSE_TIME set).
+    - Optional end_date (YYYY-MM-DD) in advance-and-tick body: stop when sim date > end_date.
 """
 
-from datetime import datetime, timezone, timedelta
+# ========== Default config (edit here; all overridable by env) ==========
+# Sim time (UTC), initial now at startup
+DEFAULT_SIM_YEAR = 2024
+DEFAULT_SIM_MONTH = 9
+DEFAULT_SIM_DAY = 24
+DEFAULT_SIM_HOUR = 13
+DEFAULT_SIM_MINUTE = 0
+DEFAULT_SIM_SECOND = 0
+
+# For 60/120 min step, extra tick at market open/close (env: MARKET_OPEN_TIME, MARKET_CLOSE_TIME, MARKET_TIMEZONE)
+DEFAULT_MARKET_OPEN_TIME = "09:30"
+DEFAULT_MARKET_CLOSE_TIME = "16:00"
+DEFAULT_MARKET_TIMEZONE = "America/New_York"
+
+# Logging and HTTP (env: LOG_FILE, LOG_LEVEL / ZUILOW_TICK_TIMEOUT / STIME_PORT)
+DEFAULT_LOG_FILE = "run/logs/stime.log"
+DEFAULT_TICK_TIMEOUT = 600                     # 600 seconds
+DEFAULT_PORT = 11185
+# ==========
+
+from datetime import datetime, timezone, timedelta, time as dt_time, date
+from typing import Optional
 import os
+import re
 import logging
 import threading
 from pathlib import Path
 import requests as _requests
 from flask import Flask, request, jsonify, send_from_directory
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None  # no open/close extra tick on Python < 3.9
+
 logger = logging.getLogger(__name__)
 
 
 def _setup_logging():
-    """配置日志：写入 run/logs/stime.log，便于排查问题。"""
+    """Configure logging to run/logs/stime.log (or LOG_FILE)."""
     log_level = (os.getenv("LOG_LEVEL") or "INFO").upper()
-    log_file = os.getenv("LOG_FILE", "run/logs/stime.log")
+    log_file = os.getenv("LOG_FILE", DEFAULT_LOG_FILE)
     log_path = Path(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     root = logging.getLogger()
@@ -46,13 +78,17 @@ def _setup_logging():
     ch.setLevel(getattr(logging, log_level, logging.INFO))
     ch.setFormatter(fmt)
     root.addHandler(ch)
-    logger.info("Stime 日志已初始化: 级别=%s, 文件=%s", log_level, log_file)
+    logger.info("Stime logging initialized: level=%s, file=%s", log_level, log_file)
 
 
 _setup_logging()
 
-# In-memory current sim time (UTC). 默认初始为 2 年前，便于回测/模拟
-_current_time: datetime = datetime.now(timezone.utc) - timedelta(days=730)
+# In-memory current sim time (UTC), initialized from DEFAULT_SIM_* above
+_current_time: datetime = datetime(
+    DEFAULT_SIM_YEAR, DEFAULT_SIM_MONTH, DEFAULT_SIM_DAY,
+    DEFAULT_SIM_HOUR, DEFAULT_SIM_MINUTE, DEFAULT_SIM_SECOND,
+    tzinfo=timezone.utc,
+)
 
 # Tick URLs: multiple URLs (e.g. zuilow then PPT). Web override: POST /config tick_urls (comma-separated)
 _tick_urls_override: list[str] | None = None
@@ -69,11 +105,7 @@ def get_zuilow_tick_url() -> str:
 
 
 def get_tick_urls() -> list[str]:
-    """
-    Ordered list of tick URLs to POST after each advance.
-    Example: [zuilow /api/scheduler/tick, ppt /api/scheduler/tick] -> first zuilow, then PPT 更新净值.
-    Env TICK_URLS = comma-separated; else ZUILOW_TICK_URL / web override as single URL.
-    """
+    """Ordered list of tick URLs to POST after each advance (env TICK_URLS or ZUILOW_TICK_URL, or web override)."""
     global _tick_urls_override, _zuilow_tick_url_override
     if _tick_urls_override is not None:
         return [u.strip().rstrip("/") for u in _tick_urls_override if u and u.strip()]
@@ -94,7 +126,7 @@ def get_zuilow_tick_timeout() -> int:
     """Tick request timeout (seconds): web override if set, else ZUILOW_TICK_TIMEOUT (default 600)."""
     if _zuilow_tick_timeout_override is not None and _zuilow_tick_timeout_override > 0:
         return _zuilow_tick_timeout_override
-    return int(os.getenv("ZUILOW_TICK_TIMEOUT", "600") or "600") or 600
+    return int(os.getenv("ZUILOW_TICK_TIMEOUT", str(DEFAULT_TICK_TIMEOUT)) or str(DEFAULT_TICK_TIMEOUT)) or DEFAULT_TICK_TIMEOUT
 
 
 # Advance-and-tick job state (background run, cancellable, queryable)
@@ -140,6 +172,79 @@ def _snap_to_previous_minute_boundary(dt: datetime, step_minutes: int) -> dateti
     return dt.replace(hour=q // 60, minute=q % 60, second=0, microsecond=0)
 
 
+def _parse_time_hhmm(s: str) -> tuple[int, int] | None:
+    """Parse '09:30' or '9:30' -> (9, 30). Returns None if invalid."""
+    if not s or not isinstance(s, str):
+        return None
+    m = re.match(r"^(\d{1,2}):(\d{2})$", s.strip())
+    if not m:
+        return None
+    h, mn = int(m.group(1)), int(m.group(2))
+    if 0 <= h <= 23 and 0 <= mn <= 59:
+        return (h, mn)
+    return None
+
+
+def _get_market_open_close_utc_today(utc_dt: datetime) -> tuple[datetime | None, datetime | None]:
+    """
+    Return (open_utc, close_utc) for the calendar day of utc_dt in market timezone.
+    Default: 09:30 / 16:00 America/New_York. Override with env MARKET_OPEN_TIME, MARKET_CLOSE_TIME, MARKET_TIMEZONE.
+    Set env to empty to disable open/close tick. If ZoneInfo unavailable, returns (None, None).
+    """
+    if ZoneInfo is None:
+        return None, None
+    open_raw = (os.getenv("MARKET_OPEN_TIME") if os.getenv("MARKET_OPEN_TIME") is not None else DEFAULT_MARKET_OPEN_TIME).strip()
+    close_raw = (os.getenv("MARKET_CLOSE_TIME") if os.getenv("MARKET_CLOSE_TIME") is not None else DEFAULT_MARKET_CLOSE_TIME).strip()
+    if not open_raw and not close_raw:
+        return None, None
+    tz_raw = os.getenv("MARKET_TIMEZONE")
+    tz_name = (tz_raw if tz_raw is not None else DEFAULT_MARKET_TIMEZONE).strip() or DEFAULT_MARKET_TIMEZONE
+    try:
+        market_tz = ZoneInfo(tz_name)
+    except Exception:
+        return None, None
+    open_hm = _parse_time_hhmm(open_raw) if open_raw else None
+    close_hm = _parse_time_hhmm(close_raw) if close_raw else None
+    if not open_hm and not close_hm:
+        return None, None
+    market_dt = utc_dt.astimezone(market_tz)
+    today = market_dt.date()
+    open_utc = close_utc = None
+    if open_hm:
+        open_local = datetime.combine(today, dt_time(open_hm[0], open_hm[1], 0), tzinfo=market_tz)
+        open_utc = open_local.astimezone(timezone.utc)
+    if close_hm:
+        close_local = datetime.combine(today, dt_time(close_hm[0], close_hm[1], 0), tzinfo=market_tz)
+        close_utc = close_local.astimezone(timezone.utc)
+    return open_utc, close_utc
+
+
+def _post_tick(tick_urls: list[str], tick_timeout: int) -> tuple[bool, int]:
+    """POST to all tick_urls with current get_now() as X-Simulation-Time. Returns (all_ok, executed_from_first)."""
+    sim_now_iso = get_now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    headers = {"Content-Type": "application/json", "X-Simulation-Time": sim_now_iso}
+    webhook_token = os.environ.get("WEBHOOK_TOKEN", "").strip()
+    if webhook_token:
+        headers["X-Webhook-Token"] = webhook_token
+    executed = 0
+    for j, url in enumerate(tick_urls):
+        try:
+            r = _requests.post(url, headers=headers, timeout=tick_timeout)
+            logger.info("[Advance+Tick] tick %s -> %d", url, r.status_code)
+        except _requests.RequestException as e:
+            logger.warning("Tick %s failed: %s", url, e)
+            if j == 0:
+                return False, 0
+            continue
+        if r.ok and j == 0:
+            d = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            executed = d.get("executed", 0)
+        elif not r.ok and j == 0:
+            logger.warning("Tick %s HTTP %d: %s", url, r.status_code, r.text[:200])
+            return False, 0
+    return True, executed
+
+
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
 
@@ -163,7 +268,7 @@ def api_set():
         dt = datetime.fromisoformat(now_str)
         set_now(dt)
         now_iso = get_now().strftime("%Y-%m-%dT%H:%M:%SZ")
-        logger.info("[Set] 仿真时间已设置: %s", now_iso)
+        logger.info("[Set] sim time set to %s", now_iso)
         return jsonify({"now": now_iso})
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -202,13 +307,14 @@ def _advance_tick_worker(
     tick_urls: list[str],
     tick_timeout: int,
     snap_to_boundary: bool = False,
+    end_date: Optional[date] = None,
 ):
-    """Background worker: advance steps_count steps; each step POST to all tick_urls (order: e.g. zuilow then PPT) with X-Simulation-Time. First URL failure aborts; later URL failures are logged."""
+    """Run steps_count advances; each step POSTs to tick_urls with X-Simulation-Time; first failure aborts. If end_date set, stop when sim date > end_date."""
     global _advance_tick_state
     one_step = {unit: step_value}
     executed_total = 0
     try:
-        if snap_to_boundary and unit == "minutes" and step_value in (5, 15, 30, 60):
+        if snap_to_boundary and unit == "minutes" and step_value in (5, 15, 30, 60, 120, 180):
             set_now(_snap_to_previous_minute_boundary(get_now(), step_value))
         with _advance_tick_lock:
             _advance_tick_state["running"] = True
@@ -219,53 +325,57 @@ def _advance_tick_worker(
             _advance_tick_state["error"] = None
             _advance_tick_state["now"] = get_now().strftime("%Y-%m-%dT%H:%M:%SZ")
         _advance_tick_cancel_event.clear()
-        logger.info("[Advance+Tick] 开始: %s 步 x %s=%s, tick_urls=%s", steps_count, unit, step_value, tick_urls)
+        logger.info("[Advance+Tick] started: %s steps x %s=%s, tick_urls=%s", steps_count, unit, step_value, tick_urls)
         for i in range(steps_count):
             if _advance_tick_cancel_event.is_set():
                 with _advance_tick_lock:
                     _advance_tick_state["cancelled"] = True
-                logger.info("[Advance+Tick] 已取消 (step %d/%d)", i + 1, steps_count)
+                logger.info("[Advance+Tick] cancelled (step %d/%d)", i + 1, steps_count)
                 break
             advance(**one_step)
-            sim_now_iso = get_now().strftime("%Y-%m-%dT%H:%M:%SZ")
-            logger.info("[Advance+Tick] step %d/%d sim_now=%s", i + 1, steps_count, sim_now_iso)
-            headers = {"Content-Type": "application/json", "X-Simulation-Time": sim_now_iso}
-            webhook_token = os.environ.get("WEBHOOK_TOKEN", "").strip()
-            if webhook_token:
-                headers["X-Webhook-Token"] = webhook_token
+            now_after_step = get_now()
+            if end_date is not None and now_after_step.date() > end_date:
+                set_now(now_after_step - timedelta(**one_step))
+                with _advance_tick_lock:
+                    _advance_tick_state["steps_done"] = i
+                    _advance_tick_state["executed_total"] = executed_total
+                    _advance_tick_state["now"] = get_now().strftime("%Y-%m-%dT%H:%M:%SZ")
+                logger.info("[Advance+Tick] stopped at end_date %s (after %d steps)", end_date.isoformat(), i)
+                break
+            # When 60/120/180-min step: insert one tick at market open and one at close if we crossed them
             step_ok = True
-            for j, url in enumerate(tick_urls):
-                try:
-                    r = _requests.post(url, headers=headers, timeout=tick_timeout)
-                    logger.info("[Advance+Tick] tick %s -> %d", url, r.status_code)
-                except _requests.RequestException as e:
-                    err = f"Tick {url} failed: {e}"
-                    if j == 0:
+            if unit == "minutes" and step_value in (60, 120, 180):
+                prev = now_after_step - timedelta(minutes=step_value)
+                open_utc, close_utc = _get_market_open_close_utc_today(now_after_step)
+                boundaries = [t for t in (open_utc, close_utc) if t is not None and prev < t < now_after_step]
+                boundaries.sort()
+                for b in boundaries:
+                    set_now(b)
+                    logger.info("[Advance+Tick] extra tick at open/close sim_now=%s", get_now().strftime("%Y-%m-%dT%H:%M:%SZ"))
+                    ok, ex = _post_tick(tick_urls, tick_timeout)
+                    executed_total += ex
+                    if not ok:
+                        set_now(now_after_step)
                         with _advance_tick_lock:
-                            _advance_tick_state["error"] = err
+                            _advance_tick_state["error"] = "Tick failed at open/close"
                             _advance_tick_state["steps_done"] = i + 1
                             _advance_tick_state["executed_total"] = executed_total
-                            _advance_tick_state["now"] = sim_now_iso
-                        logger.warning(err)
+                            _advance_tick_state["now"] = now_after_step.strftime("%Y-%m-%dT%H:%M:%SZ")
                         step_ok = False
                         break
-                    logger.warning(err)
-                    continue
-                if r.ok and j == 0:
-                    d = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-                    executed_total += d.get("executed", 0)
-                elif not r.ok:
-                    err_msg = f"Tick {url} HTTP {r.status_code}: {r.text[:200]}"
-                    if j == 0:
-                        with _advance_tick_lock:
-                            _advance_tick_state["error"] = err_msg
-                            _advance_tick_state["steps_done"] = i + 1
-                            _advance_tick_state["executed_total"] = executed_total
-                            _advance_tick_state["now"] = sim_now_iso
-                        logger.warning(err_msg)
-                        step_ok = False
-                        break
-                    logger.warning(err_msg)
+                set_now(now_after_step)
+            if step_ok:
+                sim_now_iso = get_now().strftime("%Y-%m-%dT%H:%M:%SZ")
+                logger.info("[Advance+Tick] step %d/%d sim_now=%s", i + 1, steps_count, sim_now_iso)
+                ok, ex = _post_tick(tick_urls, tick_timeout)
+                executed_total += ex
+                if not ok:
+                    with _advance_tick_lock:
+                        _advance_tick_state["error"] = _advance_tick_state.get("error") or "Tick failed"
+                        _advance_tick_state["steps_done"] = i + 1
+                        _advance_tick_state["executed_total"] = executed_total
+                        _advance_tick_state["now"] = sim_now_iso
+                    step_ok = False
             if not step_ok:
                 break
             with _advance_tick_lock:
@@ -285,22 +395,16 @@ def _advance_tick_worker(
         done = _advance_tick_state.get("steps_done", 0)
         total = _advance_tick_state.get("steps_total", 0)
         if err:
-            logger.warning("[Advance+Tick] 结束 (有错误): %s, steps_done=%d/%d", err, done, total)
+            logger.warning("[Advance+Tick] finished (with error): %s, steps_done=%d/%d", err, done, total)
         elif _advance_tick_state.get("cancelled"):
-            logger.info("[Advance+Tick] 结束: 已取消, steps_done=%d/%d", done, total)
+            logger.info("[Advance+Tick] finished: cancelled, steps_done=%d/%d", done, total)
         else:
-            logger.info("[Advance+Tick] 结束: 完成 %d/%d 步, executed_total=%s", done, total, _advance_tick_state.get("executed_total", 0))
+            logger.info("[Advance+Tick] finished: %d/%d steps, executed_total=%s", done, total, _advance_tick_state.get("executed_total", 0))
 
 
 @app.route("/advance-and-tick", methods=["POST"])
 def api_advance_and_tick():
-    """
-    Start advance-by-N + tick in background.
-    Each step: advance -> POST each TICK_URLS with X-Simulation-Time (order: e.g. zuilow then PPT).
-    Body: {"days": 5} = 5 steps of 1 day each; or {"minutes": 30, "steps": 48} = 48 steps of 30 min each.
-    Returns 202 {"status": "started", "steps": N}. Poll GET /advance-and-tick/status for progress.
-    POST /advance-and-tick/cancel to cancel. Tick timeout: ZUILOW_TICK_TIMEOUT (default 600s).
-    """
+    """Start advance-and-tick in background; returns 202, poll /advance-and-tick/status for progress."""
     tick_urls = get_tick_urls()
     if not tick_urls:
         return jsonify({"error": "TICK_URLS or ZUILOW_TICK_URL not set (server cannot call tick)"}), 503
@@ -326,13 +430,19 @@ def api_advance_and_tick():
         steps_count = step_value
         step_value = 1
     snap_to_boundary = bool(data.get("snap_to_boundary"))
+    end_date = None
+    if data.get("end_date"):
+        try:
+            end_date = datetime.strptime(str(data["end_date"])[:10], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            pass
     with _advance_tick_lock:
         if _advance_tick_state["running"]:
             return jsonify({"error": "advance-and-tick already running", "status": _advance_tick_state}), 409
-    logger.info("[Advance+Tick] 已启动后台任务: %d 步 (%s=%s)", steps_count, unit, step_value)
+    logger.info("[Advance+Tick] started background job: %d steps (%s=%s)%s", steps_count, unit, step_value, " end_date=" + end_date.isoformat() if end_date else "")
     t = threading.Thread(
         target=_advance_tick_worker,
-        args=(unit, step_value, steps_count, tick_urls, tick_timeout, snap_to_boundary),
+        args=(unit, step_value, steps_count, tick_urls, tick_timeout, snap_to_boundary, end_date),
         daemon=True,
     )
     t.start()
@@ -354,7 +464,7 @@ def api_advance_and_tick_cancel():
         if not _advance_tick_state["running"]:
             return jsonify({"status": "not_running", "state": _advance_tick_state}), 200
     _advance_tick_cancel_event.set()
-    logger.info("[Advance+Tick] 已请求取消")
+    logger.info("[Advance+Tick] cancel requested")
     return jsonify({"status": "cancel_requested"}), 200
 
 
@@ -403,5 +513,5 @@ def index():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("SIM_TIME_PORT", "11185"))
+    port = int(os.getenv("STIME_PORT", str(DEFAULT_PORT)))
     app.run(host="0.0.0.0", port=port, debug=False)

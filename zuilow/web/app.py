@@ -3,7 +3,7 @@ ZuiLow web: shared state and helpers for Flask Blueprint (routes in routes.py).
 
 Global state: _futu_broker, _market_service, _scheduler.
 Config: futu (FutuConfig defaults), ppt (config/brokers/ppt.yaml: base_url, webhook_token),
-accounts (config/accounts.yaml).
+accounts (config/accounts/*.yaml).
 
 Functions:
     get_scheduler() -> Optional[Scheduler]
@@ -86,21 +86,26 @@ _ppt_config = _load_ppt_config()
 WEBHOOK_TOKEN = (os.getenv("WEBHOOK_TOKEN") or _ppt_config.get("webhook_token") or "").strip()
 
 
-# ========== Account abstraction (config/accounts.yaml) ==========
+# ========== Account abstraction (config/accounts/*.yaml) ==========
 
 def _load_accounts_config() -> list[dict]:
-    """Load named accounts from config/accounts.yaml."""
+    """Load named accounts from config/accounts/ (paper.yaml, futu.yaml, ibkr.yaml)."""
     import yaml
-    config_path = Path(__file__).parent.parent / "config" / "accounts.yaml"
-    if not config_path.exists():
+    accounts_dir = Path(__file__).parent.parent / "config" / "accounts"
+    if not accounts_dir.is_dir():
         return []
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        return list(data.get("accounts", []))
-    except Exception as e:
-        logger.warning("Load accounts config failed: %s", e)
-        return []
+    combined = []
+    for name in ("paper.yaml", "futu.yaml", "ibkr.yaml"):
+        config_path = accounts_dir / name
+        if not config_path.exists():
+            continue
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            combined.extend(data.get("accounts") or [])
+        except Exception as e:
+            logger.warning("Load accounts %s failed: %s", name, e)
+    return combined
 
 
 _ACCOUNTS_LIST: list[dict] = _load_accounts_config()

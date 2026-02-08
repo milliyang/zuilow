@@ -6,6 +6,11 @@
     <title>ZuiLow - Live</title>
     <link rel="icon" type="image/svg+xml" href="/static/img/icon-monitor.svg">
     <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        #orders-pagination { font-size: 11px; color: #8b949e; margin: 0; }
+        #orders-pagination button { padding: 4px 8px; font-size: 11px; }
+        #orders-pagination select { padding: 2px 6px; font-size: 11px; }
+    </style>
 </head>
 <body>
     <div class="header">
@@ -142,15 +147,15 @@
                     <span>Positions</span>
                     <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="refreshPositions()">Refresh</button>
                 </div>
-                <table>
+                <table class="positions-table">
                     <thead>
                         <tr>
                             <th>Symbol</th>
                             <th>Name</th>
-                            <th>Qty</th>
-                            <th>Cost</th>
-                            <th>Price</th>
-                            <th>PnL</th>
+                            <th class="num">Qty</th>
+                            <th class="num">Cost</th>
+                            <th class="num">Price</th>
+                            <th class="num">PnL</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -162,24 +167,39 @@
             
             <!-- Orders -->
             <div class="card">
-                <div class="card-title">
-                    <span>Today's orders</span>
+                <div class="card-title" style="flex-wrap: wrap; gap: 8px;">
+                    <span>Orders</span>
+                    <div class="pagination" id="orders-pagination" style="display:none; flex:1; justify-content:flex-end;">
+                        <button type="button" id="orders-first">First</button>
+                        <button type="button" id="orders-prev">Prev</button>
+                        <span id="orders-page-info">Page 1 of 1</span>
+                        <button type="button" id="orders-next">Next</button>
+                        <button type="button" id="orders-last">Last</button>
+                        <span>Per page</span>
+                        <select id="orders-per-page">
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <span id="orders-total-info">Total: 0</span>
+                    </div>
                     <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="refreshOrders()">Refresh</button>
                 </div>
-                <table>
+                <table class="orders-table">
                     <thead>
                         <tr>
                             <th>Order ID</th>
+                            <th>Date</th>
                             <th>Symbol</th>
                             <th>Side</th>
-                            <th>Qty</th>
-                            <th>Price</th>
+                            <th class="num">Qty</th>
+                            <th class="num">Price</th>
                             <th>Status</th>
                             <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="orders-table">
-                        <tr><td colspan="7" style="text-align:center;color:#666;">Disconnected</td></tr>
+                        <tr><td colspan="8" style="text-align:center;color:#666;">Disconnected</td></tr>
                     </tbody>
                 </table>
             </div>

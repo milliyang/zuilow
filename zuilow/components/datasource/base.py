@@ -25,7 +25,7 @@ DataSource methods (abstract):
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional, Any, Dict, List
 from enum import Enum
 
 import pandas as pd
@@ -149,6 +149,24 @@ class DataSource(ABC):
             DataFrame with columns: Open, High, Low, Close, Volume
         """
         pass
+
+    def get_history_batch(
+        self,
+        symbols: List[str],
+        start_date: datetime,
+        end_date: datetime,
+        interval: str = "1d",
+        as_of: Optional[datetime] = None,
+    ) -> Dict[str, Optional[pd.DataFrame]]:
+        """
+        Batch get historical OHLCV for multiple symbols. Override in sources that support it (e.g. DMS).
+
+        Default: loop get_history. Returns Dict[symbol -> DataFrame or None].
+        """
+        out: Dict[str, Optional[pd.DataFrame]] = {}
+        for sym in symbols:
+            out[sym] = self.get_history(sym, start_date, end_date, interval, as_of=as_of)
+        return out
 
     def save_data(
         self,

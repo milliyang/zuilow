@@ -162,7 +162,7 @@ if STATIC_DIR.exists():
 
 if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "11180"))
+    port = int(os.getenv("ZUILOW_PORT", "11180"))
     logger.info("Starting ZuiLow Web Service on %s:%s", host, port)
     # threaded=True: parallel requests so CSS/JS/icons do not queue
     app.run(host=host, port=port, debug=False, threaded=True)

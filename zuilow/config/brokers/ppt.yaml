@@ -11,7 +11,8 @@ ppt:
   #base_url: "http://mongkok:11182"     # PPT service URL (no trailing slash)
 
   # Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
-  webhook_token: "aB3xK9mP2qR7sT4wY6zA8dF1gH5jL0nV"                    # must match PPT WEBHOOK_TOKEN for orders
+  # Must match PPT env WEBHOOK_TOKEN; required for orders and for GET account/positions (server-to-server auth).
+  webhook_token: "aB3xK9mP2qR7sT4wY6zA8dF1gH5jL0nV"
 
 dms:
   type: dms

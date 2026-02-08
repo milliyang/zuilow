@@ -1,0 +1,57 @@
+# Real trading stack: zuilow + ppt (no stime). DMS is external (set DMS_BASE_URL).
+# ZuiLow / PPT 的 run 目录挂载到宿主机 sai/real/run/{zuilow,ppt}，持久化 log/DB。
+# 当 real 与 DMS 同机部署时，请用 DMS_BASE_URL=http://host.docker.internal:11183（compose 已加 extra_hosts 支持 Linux）。
+name: real
+version: "3.8"
+
+services:
+  zuilow:
+    build:
+      context: ${REPO_ROOT}
+      dockerfile: simlulate/docker/Dockerfile.zuilow
+      args:
+        INSTALL_PYTORCH: ${INSTALL_PYTORCH:-false}
+        PYTORCH_CUDA_AVAILABLE: ${PYTORCH_CUDA_AVAILABLE:-false}
+    container_name: real-zuilow
+    ports:
+      - "${ZUILOW_PORT:-11180}:${ZUILOW_PORT:-11180}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - HOST=0.0.0.0
+      - ZUILOW_PORT=${ZUILOW_PORT:-11180}
+      - PAPER_TRADE_URL=http://ppt:${PPT_PORT:-11182}
+      - DMS_API_KEY=${DMS_API_KEY:-your-shared-secret}
+      - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-real_webhook_shared_token}
+      - DMS_BASE_URL=${DMS_BASE_URL:-http://host.docker.internal:11183}
+    volumes:
+      - ../run/zuilow:/workspace/zuilow/run
+    restart: unless-stopped
+    networks:
+      - real-network
+
+  ppt:
+    build:
+      context: ${REPO_ROOT}
+      dockerfile: simlulate/docker/Dockerfile.ppt
+    container_name: real-ppt
+    ports:
+      - "${PPT_PORT:-11182}:${PPT_PORT:-11182}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - PPT_PORT=${PPT_PORT:-11182}
+      - DMS_BASE_URL=${DMS_BASE_URL:-http://host.docker.internal:11183}
+      - DMS_API_KEY=${DMS_API_KEY:-your-shared-secret}
+      - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-real_webhook_shared_token}
+    volumes:
+      - ../run/ppt:/workspace/ppt/run
+    depends_on:
+      - zuilow
+    restart: unless-stopped
+    networks:
+      - real-network
+
+networks:
+  real-network:
+    driver: bridge

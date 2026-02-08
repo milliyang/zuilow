@@ -58,7 +58,7 @@ class TradingSignal:
     Attributes:
         id: Optional DB id (set after insert)
         job_name: Scheduler job name that produced this signal
-        account: Account name (from config/accounts.yaml)
+        account: Account name (from config/accounts/)
         market: Market code (e.g. HK, US)
         kind: order | rebalance | allocation
         symbol: Single symbol for order; optional for rebalance (multi-symbol in payload)
@@ -79,6 +79,7 @@ class TradingSignal:
     trigger_at: datetime | None = None
     id: int | None = None
     symbol: str | None = None  # For order: required; for rebalance: optional
+    error_message: str | None = None  # Set when status is failed (execution error reason)
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -100,6 +101,7 @@ class TradingSignal:
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "executed_at": self.executed_at.isoformat() if self.executed_at else None,
             "trigger_at": self.trigger_at.isoformat() if self.trigger_at else None,
+            "error_message": self.error_message,
         }
 
     @classmethod
@@ -172,6 +174,7 @@ class TradingSignal:
         target_weights: dict[str, float],
         trigger_at: datetime | None = None,
         created_at: datetime | None = None,
+        **payload_extra: Any,
     ) -> TradingSignal:
         """
         Create an allocation-type signal (资产配置).
@@ -187,14 +190,16 @@ class TradingSignal:
             target_weights: Symbol -> weight 0..1 (e.g. {"AAPL": 0.2, "GOOGL": 0.4, "AMD": 0.4})
             trigger_at: Optional desired execution time
             created_at: When set (e.g. sim time), used as signal creation time
+            **payload_extra: Extra keys merged into payload (e.g. _data_end_date for strategy dedup / interval)
         """
+        payload = {"target_weights": dict(target_weights), **payload_extra}
         return cls(
             job_name=job_name,
             account=account,
             market=market,
             kind=SignalKind.ALLOCATION,
             symbol=None,
-            payload={"target_weights": dict(target_weights)},
+            payload=payload,
             trigger_at=trigger_at,
             created_at=created_at if created_at is not None else ctrl.get_current_dt(),
         )

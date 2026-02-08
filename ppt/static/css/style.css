@@ -27,7 +27,7 @@ h1 { color: #58a6ff; font-size: 18px; font-weight: 600; }
 
 .grid { 
     display: grid; 
-    grid-template-columns: repeat(2, 1fr); 
+    grid-template-columns: 1fr 1.4fr; 
     gap: 12px; 
     max-width: 1200px;
     margin: 0 auto;
@@ -68,16 +68,65 @@ h1 { color: #58a6ff; font-size: 18px; font-weight: 600; }
 .stat-item { padding: 4px 0; }
 .stat-value { font-size: 14px; color: #f0f6fc; }
 
-/* Table */
-.positions-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-.positions-table th, .positions-table td { 
-    text-align: left; 
-    padding: 6px 8px; 
-    border-bottom: 1px solid #21262d; 
-    font-size: 12px;
+/* Account Overview: 紧凑单列 label-value */
+.card-overview { padding: 10px 12px; }
+.card-overview-tall { grid-row: span 2; }
+.card-overview h2 { margin-bottom: 6px; }
+.overview-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 4px 0 6px;
+    border-bottom: 1px solid #21262d;
+    margin-bottom: 4px;
 }
-.positions-table th { color: #8b949e; font-weight: 500; }
-.positions-table th.num, .positions-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.overview-total-label { font-size: 11px; color: #8b949e; }
+.overview-total-value {
+    font-size: 18px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #f0f6fc;
+}
+.overview-rows { font-size: 11px; }
+.overview-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 2px 0;
+    min-height: 20px;
+}
+.overview-label { color: #8b949e; flex-shrink: 0; }
+.overview-value {
+    font-variant-numeric: tabular-nums;
+    color: #c9d1d9;
+    text-align: right;
+    font-family: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+}
+.overview-row-net { margin-top: 2px; padding-top: 4px; border-top: 1px dashed #21262d; font-weight: 500; }
+.overview-row-net .overview-value { color: #f0f6fc; }
+.overview-divider { height: 1px; background: #21262d; margin: 4px 0; }
+.overview-costs .overview-label { color: #6e7681; }
+
+/* Table: 等宽、对齐、与 Recent Trades 一致的字号 */
+.positions-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.positions-table th, .positions-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #21262d;
+}
+.positions-table th { color: #8b949e; font-weight: 500; text-align: left; }
+.positions-table td:first-child { text-align: left; }   /* Symbol */
+.positions-table th.num, .positions-table td.num { text-align: right; }
+.positions-table td.num { white-space: nowrap; }
+.positions-summary { margin-top: 8px; font-size: 11px; color: #8b949e; font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
 
 /* Forms */
 .order-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -96,16 +145,27 @@ h1 { color: #58a6ff; font-size: 18px; font-weight: 600; }
 }
 
 /* Buttons */
-.btn { 
-    padding: 6px 12px; 
-    border: none; 
+.btn {
+    padding: 6px 12px;
+    border: 1px solid #30363d;
     border-radius: 4px;
-    cursor: pointer; 
+    cursor: pointer;
     font-size: 12px;
     font-weight: 500;
+    background: #21262d;
+    color: #c9d1d9;
 }
-.btn-buy { background: #238636; color: #fff; }
-.btn-buy:hover { background: #2ea043; }
+.btn:hover {
+    background: #30363d;
+    border-color: #8b949e;
+    color: #f0f6fc;
+}
+.btn-buy { background: #238636; color: #fff; border-color: #238636; }
+.btn-buy:hover { background: #2ea043; border-color: #2ea043; }
+.btn-primary { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+.btn-primary:hover { background: #388bfd; border-color: #388bfd; }
+.btn-danger { background: #da3633; color: #fff; border-color: #da3633; }
+.btn-danger:hover { background: #f85149; border-color: #f85149; }
 .btn-reset { background: #21262d; color: #c9d1d9; margin-top: 8px; width: 100%; }
 .btn-reset:hover { background: #30363d; }
 
@@ -117,9 +177,31 @@ h1 { color: #58a6ff; font-size: 18px; font-weight: 600; }
 }
 .btn-row .btn { flex: 1; }
 
-/* Trades */
-.trades { max-height: 150px; overflow-y: auto; font-size: 11px; }
-.trade-item { padding: 4px 0; border-bottom: 1px solid #21262d; }
+/* Trades: 等宽、对齐，格式与 CSV 一致 (datetime side symbol qty@ price) */
+.trades {
+    max-height: 150px;
+    overflow-y: auto;
+    font-size: 11px;
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+}
+.card-trades {
+    display: flex;
+    flex-direction: column;
+    min-height: 380px;
+}
+.card-trades .trades {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+}
+.trade-item {
+    padding: 3px 0;
+    border-bottom: 1px solid #21262d;
+    white-space: pre;
+    letter-spacing: 0.02em;
+}
 .trade-buy { color: #3fb950; }
 .trade-sell { color: #f85149; }
 .empty { color: #8b949e; font-style: italic; }
@@ -176,6 +258,36 @@ h1 { color: #58a6ff; font-size: 18px; font-weight: 600; }
 }
 .export-btn:hover { background: #21262d; }
 
+/* Simulation config: two columns to save vertical space */
+#simulation-config {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 20px;
+    font-size: 10px;
+    color: #8b949e;
+    padding: 6px 0 8px;
+}
+#simulation-config .sim-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+#simulation-config .sim-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+#simulation-config .sim-row .label {
+    min-width: 95px;
+    flex-shrink: 0;
+    color: #8b949e;
+}
+#simulation-config .sim-val {
+    color: #c9d1d9;
+}
+#simulation-config .export-btn { float: none; }
+
 /* Chart canvas */
 #equity-chart {
     width: 100%;
@@ -198,20 +310,58 @@ h1 { color: #58a6ff; font-size: 18px; font-weight: 600; }
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
-/* Header/nav: default colors (theme overrides below) */
+/* Header/nav: ZuiLow style — 无图标，悬停/当前页高亮 */
 .header .header-title,
-.header h1 { color: #f0f6fc; }
-.header .nav-link { color: #58a6ff; }
-.header .nav-link:hover { color: #79c0ff; }
-.header .nav-link.current { color: #8b949e; }
+.header h1 { color: #58a6ff; font-weight: 600; }
 
-/* Theme: simulate (red accents when SIMULATION_MODE or SIMULATION_TIME_URL set) */
-[data-theme=simulate] h1 { color: #f85149; }
+.header .nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+.header .nav .nav-link {
+    color: #8b949e;
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    transition: all 0.15s;
+}
+.header .nav .nav-link:hover {
+    color: #c9d1d9;
+    background: #21262d;
+}
+.header .nav .nav-link.active {
+    color: #f0f6fc;
+    background: #238636;
+}
+.header .nav .nav-user {
+    color: #8b949e;
+    font-size: 12px;
+    margin-left: 8px;
+}
+.header .nav .nav-logout {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: #8b949e;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+}
+.header .nav .nav-logout:hover {
+    color: #f85149;
+}
+
+/* Theme: simulate (red accents) */
 [data-theme=simulate] .header .header-title,
 [data-theme=simulate] .header h1 { color: #f85149; }
-[data-theme=simulate] .header .nav-link { color: #f85149; }
-[data-theme=simulate] .header .nav-link:hover { color: #ff7b72; }
-[data-theme=simulate] .header .nav-link.current { color: #8b949e; }
+[data-theme=simulate] .header .nav .nav-link { color: #f85149; }
+[data-theme=simulate] .header .nav .nav-link:hover { color: #ff7b72; background: #21262d; }
+[data-theme=simulate] .header .nav .nav-link.active { color: #f0f6fc; background: #238636; }
 [data-theme=simulate] .card h2 { color: #f85149; }
 [data-theme=simulate] a { color: #f85149; }
 [data-theme=simulate] a:hover { color: #ff7b72; }

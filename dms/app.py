@@ -147,14 +147,16 @@ startup()
 
 
 if __name__ == "__main__":
-    # Load config to get port
+    host = os.getenv("DMS_HOST", "0.0.0.0")
     try:
-        from dms.core.config import load_config
-        config = load_config()
-        port = config.service.port
-        host = config.service.host
+        port_env = os.getenv("DMS_PORT")
+        if port_env is not None:
+            port = int(port_env)
+        else:
+            from dms.core.config import load_config
+            config = load_config()
+            port = config.service.port
     except Exception:
-        port = 11183
-        host = "0.0.0.0"
+        port = int(os.getenv("DMS_PORT", "11183"))
     
     app.run(host=host, port=port, debug=False)

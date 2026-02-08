@@ -121,7 +121,7 @@
             <div class="card-title">
                 <span class="section-title">Paper Trade (PPT) <span id="paper-status-badge" class="status-badge status-disconnected">Disconnected</span><span id="paper-status-detail" class="broker-status-detail"></span></span>
             </div>
-            <p style="color:#8b949e; font-size:13px; margin:0 0 12px 0; line-height:1.4;">Simulated trading via PPT broker. Set <code>base_url</code>, <code>webhook_token</code> and <code>dms</code> in <code>config/brokers/ppt.yaml</code>. Connect requires both PPT and DMS reachable.</p>
+            <p style="color:#8b949e; font-size:13px; margin:0 0 12px 0; line-height:1.4;">Simulated trading via PPT broker. Set <code>base_url</code>, <code>webhook_token</code> and <code>dms</code> in <code>config/brokers/ppt.yaml</code>. Connect requires both PPT and DMS reachable. <strong>webhook_token</strong> must match PPT env <code>WEBHOOK_TOKEN</code>, otherwise Live account/positions will return 401.</p>
             <div class="broker-test-row" style="margin-bottom:8px;">
                 <span class="broker-test-label">PPT:</span>
                 <span class="broker-test-url" id="ppt-url">--</span>
@@ -348,7 +348,7 @@
                     const data = await res.json();
                     const accounts = data.accounts || [];
                     if (accounts.length === 0) {
-                        el.innerHTML = '<p style="color:#8b949e;font-size:13px;margin:0;">No Real accounts in config/accounts.yaml (env: REAL).</p>';
+                        el.innerHTML = '<p style="color:#8b949e;font-size:13px;margin:0;">No Real accounts in config/accounts/ (env: REAL).</p>';
                         return;
                     }
                     el.innerHTML = accounts.map(function(a) {

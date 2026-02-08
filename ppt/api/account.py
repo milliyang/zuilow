@@ -157,6 +157,8 @@ def get_account_api():
     as_of_date = get_equity_date()
     position_value, total_value, pnl, pnl_pct = _compute_market_value(account, positions, as_of_date)
     cost_stats = database.get_account_cost_stats(account_name)
+    total_position_cost = sum(pos['qty'] * pos['avg_price'] for pos in positions.values())
+    unrealized_pnl = position_value - total_position_cost
 
     return jsonify({
         'name': account_name,
@@ -166,6 +168,8 @@ def get_account_api():
         'total_value': round(total_value, 2),
         'pnl': round(pnl, 2),
         'pnl_pct': round(pnl_pct, 2),
+        'unrealized_pnl': round(unrealized_pnl, 2),
+        'total_position_cost': round(total_position_cost, 2),
         'created_at': account['created_at'],
         'cost_stats': {
             'total_commission': round(cost_stats['total_commission'], 2),

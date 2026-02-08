@@ -10,17 +10,27 @@
         .filters { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
         .filters label { font-size: 12px; color: #8b949e; }
         .filters select, .filters input[type=date] { padding: 6px 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; }
-        .pagination { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: #8b949e; }
-        .pagination button { padding: 6px 12px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; cursor: pointer; }
+        .pagination { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 11px; color: #8b949e; }
+        .pagination button { padding: 4px 8px; font-size: 11px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; cursor: pointer; }
         .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .signals-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .signals-table th, .signals-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #21262d; }
+        .pagination select { padding: 2px 6px; font-size: 11px; background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #c9d1d9; }
+        .signals-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .signals-table th, .signals-table td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #21262d; }
         .signals-table th { color: #8b949e; font-weight: 600; }
         .signals-table td { color: #c9d1d9; }
         .status-pending { color: #d29922; }
         .status-executed { color: #3fb950; }
         .status-failed { color: #f85149; }
         .status-cancelled { color: #8b949e; }
+        .signal-error-cell { max-width: 320px; word-break: break-word; white-space: normal; font-size: 12px; color: #f85149; }
+        .kind-link { color: #58a6ff; cursor: pointer; text-decoration: underline; }
+        .kind-link:hover { color: #79b8ff; }
+        #payload-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+        #payload-modal.show { display: flex; }
+        #payload-modal .modal-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; max-width: 90%; max-height: 80vh; overflow: auto; padding: 16px; }
+        #payload-modal .modal-title { font-weight: 600; margin-bottom: 12px; color: #f0f6fc; }
+        #payload-modal pre { margin: 0; font-size: 12px; color: #c9d1d9; white-space: pre-wrap; word-break: break-all; }
+        #payload-modal .modal-close { margin-top: 12px; }
     </style>
 </head>
 <body>
@@ -40,7 +50,6 @@
     </div>
     <div class="main-content">
         <div class="card">
-            <div class="card-title">Trading Signals</div>
             <div class="filters">
                 <label>Account</label>
                 <select id="filter-account"><option value="">All</option></select>
@@ -63,24 +72,30 @@
                     <option value="">All</option>
                     <option value="order">Order</option>
                     <option value="rebalance">Rebalance</option>
+                    <option value="allocation">Allocation</option>
                 </select>
                 <label>Date from</label>
                 <input type="date" id="filter-date-from" title="Optional start date (YYYY-MM-DD)">
                 <label>Date to</label>
                 <input type="date" id="filter-date-to" title="Optional end date (YYYY-MM-DD)">
-                <label>Per page</label>
-                <select id="filter-limit">
-                    <option value="20" selected>20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
                 <button class="btn btn-secondary" onclick="goPage(1); loadSignals();">Query</button>
             </div>
-            <div class="pagination" id="pagination-bar" style="display:none;">
-                <button type="button" id="btn-prev" onclick="prevPage()">Prev</button>
-                <span id="page-info">Page 1 of 1</span>
-                <button type="button" id="btn-next" onclick="nextPage()">Next</button>
-                <span id="total-info">Total: 0</span>
+            <div class="card-title" style="flex-wrap: wrap; gap: 8px;">
+                <span>Trading Signals</span>
+                <div class="pagination" id="pagination-bar" style="display:none;">
+                    <button type="button" id="btn-first" onclick="firstPage()">First</button>
+                    <button type="button" id="btn-prev" onclick="prevPage()">Prev</button>
+                    <span id="page-info">Page 1 of 1</span>
+                    <button type="button" id="btn-next" onclick="nextPage()">Next</button>
+                    <button type="button" id="btn-last" onclick="lastPage()">Last</button>
+                    <span>Per page</span>
+                    <select id="filter-limit" onchange="goPage(1); loadSignals();">
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    <span id="total-info">Total: 0</span>
+                </div>
             </div>
             <table class="signals-table">
                 <thead>
@@ -93,14 +108,22 @@
                         <th>Symbol</th>
                         <th>Status</th>
                         <th>Created</th>
+                        <th>Error</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody id="signals-tbody">
-                    <tr><td colspan="9">Loading...</td></tr>
+                    <tr><td colspan="10">Loading...</td></tr>
                 </tbody>
             </table>
             <div id="footer-time" style="font-size:11px;color:#8b949e;margin-top:12px;"></div>
+        </div>
+        <div id="payload-modal" onclick="if (event.target === this) closePayloadModal();">
+            <div class="modal-box">
+                <div class="modal-title" id="payload-modal-title">Signal payload</div>
+                <pre id="payload-modal-body"></pre>
+                <button type="button" class="btn btn-secondary modal-close" onclick="closePayloadModal();">Close</button>
+            </div>
         </div>
     </div>
     <script src="/static/js/common.js"></script>
@@ -131,8 +154,10 @@
             return '/api/signals?' + params.toString();
         }
         function goPage(p) { currentPage = Math.max(1, p); }
+        function firstPage() { goPage(1); loadSignals(); }
         function prevPage() { goPage(currentPage - 1); loadSignals(); }
         function nextPage() { goPage(currentPage + 1); loadSignals(); }
+        function lastPage() { goPage(999999); loadSignals(); }
         async function loadSignals() {
             const tbody = document.getElementById('signals-tbody');
             const bar = document.getElementById('pagination-bar');
@@ -140,24 +165,38 @@
                 const data = await apiRequest(buildQuery(currentPage));
                 const list = data.signals || (Array.isArray(data) ? data : []);
                 const total = data.total != null ? data.total : list.length;
-                const page = data.page != null ? data.page : 1;
+                let page = data.page != null ? data.page : 1;
                 const limit = data.limit != null ? data.limit : 20;
-                currentPage = page;
                 const totalPages = Math.max(1, Math.ceil(total / limit));
-                tbody.innerHTML = list.map(s => {
+                if (currentPage > totalPages) { currentPage = totalPages; loadSignals(); return; }
+                currentPage = page;
+                function esc(s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+                window._signalsList = list;
+                function kindCell(s, idx) {
+                    const k = s.kind || '';
+                    if (k === 'allocation' || k === 'rebalance') {
+                        return '<span class="kind-link" onclick="showPayload(' + idx + ')" title="Click to view payload">' + esc(k) + '</span>';
+                    }
+                    return esc(k);
+                }
+                tbody.innerHTML = list.map((s, idx) => {
                     const statusClass = 'status-' + (s.status || '');
                     const cancelBtn = s.status === 'pending' && s.id
                         ? '<button class="btn btn-secondary" style="padding:4px 8px;font-size:11px;" onclick="cancelSignal(' + s.id + ')">Cancel</button>'
                         : '';
-                    return '<tr><td>' + (s.id || '') + '</td><td>' + (s.job_name || '') + '</td><td>' + (s.account || '') + '</td><td>' + (s.market || '') + '</td><td>' + (s.kind || '') + '</td><td>' + (s.symbol || '') + '</td><td class="' + statusClass + '">' + (s.status || '') + '</td><td>' + (s.created_at || '') + '</td><td>' + cancelBtn + '</td></tr>';
-                }).join('') || '<tr><td colspan="9">No signals</td></tr>';
+                    const err = (s.status === 'failed' && s.error_message) ? esc(s.error_message) : '';
+                    const errTitle = (s.error_message ? esc(s.error_message) : '');
+                    return '<tr><td>' + (s.id || '') + '</td><td>' + esc(s.job_name) + '</td><td>' + esc(s.account) + '</td><td>' + esc(s.market) + '</td><td>' + kindCell(s, idx) + '</td><td>' + esc(s.symbol) + '</td><td class="' + statusClass + '">' + (s.status || '') + '</td><td>' + esc(s.created_at) + '</td><td class="signal-error-cell" title="' + errTitle + '">' + err + '</td><td>' + cancelBtn + '</td></tr>';
+                }).join('') || '<tr><td colspan="10">No signals</td></tr>';
                 bar.style.display = 'flex';
                 document.getElementById('page-info').textContent = 'Page ' + page + ' of ' + totalPages;
                 document.getElementById('total-info').textContent = 'Total: ' + total;
+                document.getElementById('btn-first').disabled = page <= 1;
                 document.getElementById('btn-prev').disabled = page <= 1;
                 document.getElementById('btn-next').disabled = page >= totalPages;
+                document.getElementById('btn-last').disabled = page >= totalPages;
             } catch (e) {
-                tbody.innerHTML = '<tr><td colspan="9">Error: ' + e.message + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10">Error: ' + e.message + '</td></tr>';
                 bar.style.display = 'none';
             }
         }
@@ -178,6 +217,35 @@
                     if (name) sel.appendChild(new Option(name, name));
                 });
             } catch (e) {}
+        }
+        function formatPayloadForDisplay(payload) {
+            const out = {};
+            if (payload.target_weights && typeof payload.target_weights === 'object') {
+                out.target_weights = {};
+                for (const [sym, w] of Object.entries(payload.target_weights)) {
+                    const pct = typeof w === 'number' ? (w * 100).toFixed(2) + '%' : w;
+                    out.target_weights[sym] = pct;
+                }
+            }
+            if (payload.target_mv && typeof payload.target_mv === 'object') {
+                out.target_mv = payload.target_mv;
+            }
+            if (Object.keys(out).length === 0) return payload;
+            return { ...payload, ...out };
+        }
+        function showPayload(idx) {
+            const list = window._signalsList;
+            if (!list || !list[idx]) return;
+            const s = list[idx];
+            const payload = s.payload || {};
+            const display = formatPayloadForDisplay(payload);
+            const title = (s.kind || '') + ' #' + (s.id || '') + ' — ' + (s.job_name || '');
+            document.getElementById('payload-modal-title').textContent = title;
+            document.getElementById('payload-modal-body').textContent = JSON.stringify(display, null, 2);
+            document.getElementById('payload-modal').classList.add('show');
+        }
+        function closePayloadModal() {
+            document.getElementById('payload-modal').classList.remove('show');
         }
         loadAccounts().then(function() { goPage(1); loadSignals(); });
         refreshFooterTime('footer-time');

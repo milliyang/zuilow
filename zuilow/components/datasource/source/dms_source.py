@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 from urllib.parse import urljoin
 
 import pandas as pd
@@ -145,6 +145,60 @@ class DmsSource(DataSource):
         except Exception as e:
             logger.debug("DMS get_history %s failed: %s", symbol, e)
             return None
+
+    def get_history_batch(
+        self,
+        symbols: List[str],
+        start_date: datetime,
+        end_date: datetime,
+        interval: str = "1d",
+        as_of: Optional[datetime] = None,
+    ) -> Dict[str, Optional[pd.DataFrame]]:
+        """One request to DMS read/batch, returns Dict[symbol, Optional[DataFrame]]."""
+        if not symbols:
+            return {}
+        url = self._url("read/batch")
+        payload = {
+            "symbols": list(symbols),
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "interval": interval,
+        }
+        if as_of is not None:
+            payload["as_of"] = as_of.isoformat()
+        out: Dict[str, Optional[pd.DataFrame]] = {sym: None for sym in symbols}
+        try:
+            r = requests.post(
+                url,
+                json=payload,
+                timeout=max(self._timeout, 30 + len(symbols) // 10),
+                headers={**self._headers, "Content-Type": "application/json"},
+            )
+            r.raise_for_status()
+            data = r.json()
+            for sym in symbols:
+                raw = data.get(sym) if isinstance(data, dict) else None
+                if raw is None:
+                    continue
+                records = raw.get("data") or []
+                index_str = raw.get("index") or []
+                if not records:
+                    continue
+                df = pd.DataFrame(records)
+                if index_str:
+                    df.index = pd.to_datetime(index_str)
+                elif "time" in df.columns:
+                    df["time"] = pd.to_datetime(df["time"])
+                    df.set_index("time", inplace=True)
+                for col in ["Open", "High", "Low", "Close", "Volume"]:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+                df = df[["Open", "High", "Low", "Close", "Volume"]].copy()
+                df = df.sort_index()
+                out[sym] = df
+        except Exception as e:
+            logger.debug("DMS get_history_batch failed: %s", e)
+        return out
 
     def get_symbols(self) -> List[str]:
         """All symbols from DMS (GET /api/dms/symbols). Client-side cached for symbols_cache_ttl sec (default 300)."""

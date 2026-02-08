@@ -65,6 +65,9 @@ class PptConfig:
             dms_cfg = data.get("dms")
             if isinstance(dms_cfg, dict):
                 dms_config = dict(dms_cfg)
+                # Env override for Docker/same-host: container uses host.docker.internal to reach DMS on host
+                if os.environ.get("DMS_BASE_URL"):
+                    dms_config["base_url"] = (os.environ.get("DMS_BASE_URL") or "").strip().rstrip("/")
             else:
                 dms_config = None
             return cls(base_url=base, webhook_token=token, dms_config=dms_config)
@@ -219,7 +222,16 @@ class PptGateway:
         url = self._base + path if path.startswith("/") else self._base + "/" + path
         try:
             r = requests.get(url, params=params, headers=self._headers(), timeout=self._timeout)
-            return r.json() if r.ok else None
+            if not r.ok:
+                if r.status_code == 401:
+                    logger.warning(
+                        "PptGateway GET %s -> 401 Unauthorized. Set webhook_token in config/brokers/ppt.yaml to match PPT env WEBHOOK_TOKEN.",
+                        path,
+                    )
+                else:
+                    logger.debug("PptGateway GET %s -> %s: %s", path, r.status_code, (r.text or "")[:200])
+                return None
+            return r.json()
         except (requests.ConnectionError, requests.Timeout) as e:
             logger.debug("PptGateway GET %s (connection error): %s", path, e)
             self.disconnect()
@@ -308,6 +320,24 @@ class PptGateway:
                 "pnl_pct": float(p.get("pnl_pct", 0)),
             })
         return out
+
+    def get_watchlist_raw(self) -> dict | None:
+        """Raw PPT GET /api/watchlist (for status page load). Uses token when configured; no is_connected check."""
+        if not self._base:
+            return None
+        return self._get("/api/watchlist")
+
+    def update_watchlist_names(self, updates: list[dict]) -> dict | None:
+        """Batch update display names only. POST /api/watchlist/batch-names. updates: [{\"symbol\": \"US.AAPL\", \"name\": \"Apple Inc\"}, ...]. Returns response or None on failure."""
+        if not self._base or not updates:
+            return None
+        return self._post("/api/watchlist/batch-names", {"updates": updates})
+
+    def refresh_watchlist_names_from_positions(self) -> dict | None:
+        """Ask PPT to refresh watchlist names from current account positions (DMS quote name per symbol). POST /api/watchlist/refresh-names-from-positions. Returns response or None."""
+        if not self._base:
+            return None
+        return self._post("/api/watchlist/refresh-names-from-positions", {})
 
     def get_orders(self, account: str | None = None, limit: int = 50) -> list[dict]:
         """Get order history from PPT. account: optional; passed as query param (no switch)."""

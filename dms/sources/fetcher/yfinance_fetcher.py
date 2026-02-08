@@ -16,7 +16,7 @@ Dependencies:
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 import pandas as pd
 import yfinance as yf
@@ -125,10 +125,14 @@ class YFinanceFetcher(Fetcher):
                 }
                 yf_interval = interval_map.get(interval, "1d")
                 
-                # Fetch data
+                # yfinance end date is EXCLUSIVE: end="2026-02-06" returns data up to 2026-02-05.
+                # Add 1 day so that the last calendar day is included (fixes "latest days never updated").
+                end_date_inclusive = end_date.date() if hasattr(end_date, "date") else end_date
+                end_exclusive = (end_date_inclusive + timedelta(days=1)).strftime("%Y-%m-%d")
+                start_str = start_date.strftime("%Y-%m-%d")
                 hist = ticker.history(
-                    start=start_date.strftime("%Y-%m-%d"),
-                    end=end_date.strftime("%Y-%m-%d"),
+                    start=start_str,
+                    end=end_exclusive,
                     interval=yf_interval,
                 )
                 

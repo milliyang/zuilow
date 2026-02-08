@@ -1,3 +1,0 @@
-# Bull5dRandom: 测试用，无参数。策略内通过 DMS 拉历史、简单回测后随机选 5 只+随机权重；每 10 天由 job interval 调仓
-strategy: Bull5dRandom
-description: DMS history + simple backtest filter, random 5 stocks and weights; rebalance every 10 days (test)

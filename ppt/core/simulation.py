@@ -54,7 +54,8 @@ def load_config() -> Dict[str, Any]:
     """Load simulation config from config/simulation.yaml; merge presets."""
     global _config
     
-    config_path = Path(__file__).parent / "config" / "simulation.yaml"
+    # 配置在 ppt 项目根下的 config/，即 ppt/config/simulation.yaml
+    config_path = Path(__file__).resolve().parent.parent / "config" / "simulation.yaml"
     
     if config_path.exists():
         try:

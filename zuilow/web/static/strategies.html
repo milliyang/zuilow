@@ -34,6 +34,7 @@
                 <thead>
                     <tr>
                         <th>Strategy</th>
+                        <th>Config</th>
                         <th>Job</th>
                         <th>Trigger</th>
                         <th>Runs</th>
@@ -41,7 +42,7 @@
                     </tr>
                 </thead>
                 <tbody id="strategies-list">
-                    <tr><td colspan="5" style="text-align:center; color:#8b949e; font-size:12px;">Loading...</td></tr>
+                    <tr><td colspan="6" style="text-align:center; color:#8b949e; font-size:12px;">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -57,29 +58,39 @@
             if (res.status === 401) { window.location.href = '/login'; return; }
             return res.json();
         }
+        function showStrategyConfig(stratIdx) {
+            var list = window._strategiesData;
+            if (!list || !list[stratIdx]) return;
+            var s = list[stratIdx];
+            var txt = JSON.stringify(s.config || {}, null, 2);
+            if (typeof alert !== 'undefined') alert(txt); else console.log(s.strategy + ' config:', txt);
+        }
         async function load() {
             const el = document.getElementById('strategies-list');
             try {
                 const data = await apiRequest('/api/strategies');
                 if (!Array.isArray(data) || data.length === 0) {
-                    el.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#8b949e;">No strategies (no jobs with strategy name).</td></tr>';
+                    el.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#8b949e;">No strategies (no jobs with strategy name).</td></tr>';
                     return;
                 }
+                window._strategiesData = data;
                 var rows = [];
-                data.forEach(function(s) {
+                data.forEach(function(s, stratIdx) {
                     var jobs = s.jobs || [];
+                    var configCell = '<button type="button" class="btn btn-secondary" style="padding:2px 8px; font-size:11px;" onclick="showStrategyConfig(' + stratIdx + ')">View</button>';
                     if (jobs.length === 0) {
-                        rows.push('<tr><td class="strategy-name">' + escapeHtml(s.strategy) + '</td><td colspan="4" style="color:#8b949e;">No jobs</td></tr>');
+                        rows.push('<tr><td class="strategy-name">' + escapeHtml(s.strategy) + '</td><td>' + configCell + '</td><td colspan="4" style="color:#8b949e;">No jobs</td></tr>');
                     } else {
                         jobs.forEach(function(j, i) {
                             var lastRun = j.last_run ? new Date(j.last_run).toLocaleString() : 'Never';
-                            rows.push('<tr><td class="strategy-name">' + escapeHtml(s.strategy) + '</td><td>' + escapeHtml(j.name) + '</td><td>' + escapeHtml(j.trigger || '-') + '</td><td>' + (j.run_count || 0) + '</td><td style="font-size:11px; color:#8b949e;">' + lastRun + '</td></tr>');
+                            var configCol = i === 0 ? configCell : '';
+                            rows.push('<tr><td class="strategy-name">' + escapeHtml(s.strategy) + '</td><td>' + configCol + '</td><td>' + escapeHtml(j.name) + '</td><td>' + escapeHtml(j.trigger || '-') + '</td><td>' + (j.run_count || 0) + '</td><td style="font-size:11px; color:#8b949e;">' + lastRun + '</td></tr>');
                         });
                     }
                 });
                 el.innerHTML = rows.join('');
             } catch (e) {
-                el.innerHTML = '<tr><td colspan="5" style="color:#f85149;">Error: ' + escapeHtml(e.message) + '</td></tr>';
+                el.innerHTML = '<tr><td colspan="6" style="color:#f85149;">Error: ' + escapeHtml(e.message) + '</td></tr>';
             }
         }
         load();

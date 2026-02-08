@@ -16,11 +16,11 @@ Endpoints:
     GET  /api/export/equity   Export equity CSV (login)
 """
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request, Response
 from core import db as database
 from core import simulation
-from core.utils import get_quote, get_quotes_batch, normalize_symbol, get_equity_date, get_current_datetime_iso, is_sim_mode
+from core.utils import get_quote, get_quotes_batch, get_benchmark_bars, normalize_symbol, get_equity_date, get_current_datetime_iso, is_sim_mode
 from core.auth import admin_required, login_required_api
 
 bp = Blueprint('trade', __name__)
@@ -29,7 +29,7 @@ bp = Blueprint('trade', __name__)
 @bp.route('/api/positions', methods=['GET'])
 @login_required_api
 def get_positions_api():
-    """Get positions. Optional query: account=<name>; else current account."""
+    """Get positions. Optional query: account=<name>; realtime=true for live quotes (DMS batch)."""
     account_name = (request.args.get('account') or '').strip() or database.get_current_account_name()
     if not database.get_account(account_name):
         return jsonify({'error': f'Account not found: {account_name}'}), 400
@@ -37,6 +37,18 @@ def get_positions_api():
     realtime = request.args.get('realtime', 'false').lower() == 'true'
 
     watchlist = {w['symbol']: w for w in database.get_watchlist()}
+
+    # Realtime: one get_quotes_batch for all position symbols (DMS batch)
+    quotes = {}
+    if realtime and db_positions:
+        symbols = list(db_positions.keys())
+        quotes = get_quotes_batch(symbols)
+        for symbol, quote in quotes.items():
+            if quote.get('valid', False) and (quote.get('price') or 0) > 0:
+                if symbol not in watchlist:
+                    database.add_to_watchlist(symbol, quote.get('name', symbol))
+                database.update_watchlist_quote(symbol, quote['price'], quote.get('name', symbol))
+        watchlist = {w['symbol']: w for w in database.get_watchlist()}
 
     positions = []
     total_cost = 0
@@ -49,6 +61,7 @@ def get_positions_api():
 
         item = {
             'symbol': symbol,
+            'name': watchlist.get(symbol, {}).get('name') or symbol,
             'qty': pos['qty'],
             'avg_price': round(pos['avg_price'], 2),
             'cost': round(cost, 2),
@@ -56,13 +69,9 @@ def get_positions_api():
 
         current_price = 0
         if realtime:
-            quote = get_quote(symbol)
+            quote = quotes.get(symbol, {})
             current_price = quote.get('price', 0) if quote.get('valid', False) else 0
-            if current_price > 0:
-                if symbol not in watchlist:
-                    database.add_to_watchlist(symbol, quote.get('name', symbol))
-                database.update_watchlist_quote(symbol, current_price, quote.get('name', symbol))
-            elif symbol in watchlist and (watchlist[symbol].get('last_price') or 0) > 0:
+            if current_price <= 0 and symbol in watchlist and (watchlist[symbol].get('last_price') or 0) > 0:
                 current_price = watchlist[symbol]['last_price']
         else:
             if symbol in watchlist and watchlist[symbol].get('last_price'):
@@ -189,7 +198,9 @@ def place_order():
             old_qty = pos['qty']
             old_value = old_qty * pos['avg_price']
             new_qty = old_qty + filled_qty
-            new_avg_price = (old_value + filled_value) / new_qty
+            # 用未舍入的成交金额算均价，避免 filled_value 四舍五入到 2 位带来的累积误差
+            add_value = filled_qty * exec_price
+            new_avg_price = (old_value + add_value) / new_qty
             database.update_position(account_name, symbol, new_qty, new_avg_price)
         else:
             database.update_position(account_name, symbol, filled_qty, exec_price)
@@ -251,38 +262,70 @@ def place_order():
 @bp.route('/api/trades', methods=['GET'])
 @login_required_api
 def get_trades_api():
-    """Get trades. Optional query: account=<name>; else current account."""
+    """Get trades. Optional query: account=<name>, page=1, limit=20. Returns trades, total, page, limit."""
     account_name = (request.args.get('account') or '').strip() or database.get_current_account_name()
     if not database.get_account(account_name):
         return jsonify({'error': f'Account not found: {account_name}'}), 400
-    limit = min(max(int(request.args.get('limit', 100)), 1), 500)
-    trades = database.get_trades(account_name, limit=limit)
-    return jsonify({'trades': trades})
+    page = max(1, int(request.args.get('page', 1)))
+    limit = min(max(int(request.args.get('limit', 20)), 1), 500)
+    total = database.get_trades_count(account_name)
+    offset = (page - 1) * limit
+    trades = database.get_trades(account_name, limit=limit, offset=offset)
+    return jsonify({'trades': trades, 'total': total, 'page': page, 'limit': limit})
+
+
+def _align_benchmark_to_dates(bars, history_dates):
+    """bars = [(date_str, close), ...]. Return [{date, value}, ...] normalized to 100 at first, aligned to history_dates."""
+    if not bars:
+        return []
+    first_close = bars[0][1]
+    if not first_close or first_close <= 0:
+        return []
+    by_date = {d: c for d, c in bars}
+    out = []
+    last_close = None
+    for d in history_dates:
+        last_close = by_date.get(d) or last_close
+        if last_close is not None:
+            out.append({'date': d, 'value': round(100 * last_close / first_close, 2)})
+    return out
 
 
 @bp.route('/api/equity', methods=['GET'])
 @login_required_api
 def get_equity_history_api():
-    """Get equity history."""
+    """Get equity history. When DMS is configured, also fetches SPY/QQQ for the same date range and returns normalized benchmark series (100 = start) for chart comparison."""
     account_name = database.get_current_account_name()
     account = database.get_account(account_name)
     history = database.get_equity_history(account_name)
-    return jsonify({
+    payload = {
         'history': history,
-        'initial_capital': account['initial_capital']
-    })
+        'initial_capital': account['initial_capital'],
+        'benchmarks': {},
+    }
+    if len(history) >= 2:
+        start_date = history[0]['date']
+        end_date = history[-1]['date']
+        bars = get_benchmark_bars(['US.SPY', 'US.QQQ'], start_date, end_date)
+        history_dates = [h['date'] for h in history]
+        for sym, key in [('US.SPY', 'spy'), ('US.QQQ', 'qqq')]:
+            payload['benchmarks'][key] = _align_benchmark_to_dates(bars.get(sym) or [], history_dates)
+    return jsonify(payload)
 
 
 @bp.route('/api/equity/update', methods=['POST'])
 @admin_required
 def update_equity_with_market_price():
-    """Update today equity with market price (admin). In sim mode use stime date (get_equity_date() fetches if needed)."""
-    as_of_date = get_equity_date()
+    """Update equity with market price (admin). Only updates the **last** date in equity_history so we do not overwrite historical dates with current positions (which would corrupt the curve)."""
     results = []
     failed_symbols = []
 
     for acc in database.get_all_accounts():
         account_name = acc['name']
+        # 只更新曲线最后一天，避免用「当前持仓+当前价」覆盖历史某日（否则 sim 下 stime 可能指首日，会改坏曲线开头）
+        last_date = database.get_max_equity_date(account_name)
+        as_of_date = get_equity_date() if last_date is None else last_date
+
         positions = database.get_positions(account_name)
 
         if not positions:
@@ -291,7 +334,16 @@ def update_equity_with_market_price():
             continue
 
         symbols = list(positions.keys())
-        quotes = get_quotes_batch(symbols)
+        # 按「要更新的那天」取价，避免用今日价覆盖历史日导致曲线末端被压扁（如 40% 变成 13%）
+        as_of_iso = None
+        if last_date:
+            try:
+                date_str = str(last_date)[:10]
+                dt = datetime.fromisoformat(date_str + "T23:59:59+00:00")
+                as_of_iso = dt.isoformat()
+            except Exception:
+                pass
+        quotes = get_quotes_batch(symbols, as_of_iso=as_of_iso)
         watchlist = {w['symbol']: w for w in database.get_watchlist()}
         for symbol in symbols:
             q = quotes.get(symbol, {})

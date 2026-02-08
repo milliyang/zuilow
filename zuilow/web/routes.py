@@ -40,6 +40,7 @@ from flask_login import login_required
 
 import datetime as dt
 
+from .auth import login_required_api
 from .app import (
     get_page,
     execute_backtest,
@@ -260,7 +261,7 @@ def _resolve_order_price(symbol: str, account_name: str | None = None) -> float:
 def api_order_post():
     """
     Place order. Two modes:
-    1) With account (recommended): account name from config/accounts.yaml, routed by type.
+    1) With account (recommended): account name from config/accounts/, routed by type.
     2) Without account: use global mode (legacy).
     When price is 0 or missing: market order (no quote required). When price>0: limit order.
     """
@@ -559,7 +560,7 @@ def _build_paper_account(acc_data: dict, pos_data: dict | None) -> dict:
 @bp.route("/api/account")
 def api_account():
     """
-    Account info. Optional query: account=<name> (from config/accounts.yaml).
+    Account info. Optional query: account=<name> (from config/accounts/).
     When not given, uses session['live_account'] if set, else default mode paper.
     """
     account_name = _live_account_from_request()
@@ -667,20 +668,22 @@ def api_account():
 
 @bp.route("/api/orders")
 def api_orders():
-    """Unified orders list. Optional query: account=<name>; else session['live_account']. Routes by account type; paper from PPT broker."""
+    """Unified orders list. Optional query: account=<name>, limit=<n>; else session['live_account']. Routes by account type; paper from PPT broker."""
     account_name = _live_account_from_request()
     if not account_name:
         return jsonify({"orders": []})
     acc_cfg = get_account_by_name(account_name)
     if not acc_cfg:
         return jsonify({"error": f"Unknown account: {account_name}"}), 400
+    limit = request.args.get("limit", type=int)
+    limit = min(max(limit or 200, 1), 500) if limit is not None else 200
     acc_type = (acc_cfg.get("type") or "paper").lower()
     if acc_type == "paper":
         ppt = get_ppt_broker()
         if not ppt or not ppt.is_connected:
             return jsonify({"orders": []})
         paper_account = (acc_cfg.get("paper_account") or "").strip() or account_name
-        orders = ppt.get_orders(account=paper_account)
+        orders = ppt.get_orders(account=paper_account, limit=limit)
         return jsonify({"orders": orders or []})
     if acc_type == "futu":
         broker = get_futu_broker()
@@ -708,7 +711,10 @@ def api_positions():
     """Unified positions list. Optional query: account=<name>; else session['live_account']. Routes by account type; paper returns []."""
     account_name = _live_account_from_request()
     if not account_name:
-        return jsonify({"positions": []})
+        return jsonify({
+            "positions": [],
+            "hint": "No account selected. On Live page select gateway (e.g. PPT) and an account; each ZuiLow instance has its own session.",
+        })
     acc_cfg = get_account_by_name(account_name)
     if not acc_cfg:
         return jsonify({"error": f"Unknown account: {account_name}"}), 400
@@ -716,9 +722,24 @@ def api_positions():
     if acc_type == "paper":
         paper_account = (acc_cfg.get("paper_account") or "").strip() or account_name
         ppt = get_ppt_broker()
-        pos = ppt.get_positions_raw(paper_account) if ppt else None
-        positions = (pos.get("positions") or []) if isinstance(pos, dict) else []
-        return jsonify({"positions": positions})
+        if not ppt or not ppt.is_connected:
+            return jsonify({"error": "PPT broker not connected", "positions": []}), 503
+        pos = ppt.get_positions_raw(paper_account)
+        raw = (pos.get("positions") or []) if isinstance(pos, dict) else []
+        hint = None
+        if pos is None and ppt.is_connected:
+            accounts_resp = ppt.get_accounts()
+            if accounts_resp is None:
+                hint = "PPT returned 401. Set webhook_token in config/brokers/ppt.yaml to match PPT env WEBHOOK_TOKEN, then reconnect."
+        # Normalize so frontend always has quantity/available (for display and close)
+        positions = []
+        for p in raw:
+            qty = int(p.get("quantity", p.get("qty", 0)) or 0)
+            positions.append({**p, "quantity": qty, "qty": qty, "available": p.get("available", qty)})
+        out = {"positions": positions}
+        if hint:
+            out["hint"] = hint
+        return jsonify(out)
     if acc_type == "futu":
         broker = get_futu_broker()
         if not broker or not broker.is_connected:
@@ -771,6 +792,21 @@ def api_trades():
             ppt = get_ppt_broker()
             data = ppt.get_trades(account=paper_account, page=page, limit=limit) if ppt else None
             if data and isinstance(data.get("trades"), list):
+                if data.get("total") is not None:
+                    # PPT returns paginated response with total
+                    for t in data["trades"]:
+                        trades.append({
+                            "timestamp": t.get("time", ""),
+                            "symbol": t.get("symbol", ""),
+                            "side": t.get("side", "buy"),
+                            "quantity": int(t.get("qty", 0)),
+                            "price": float(t.get("price", 0)),
+                            "value": float(t.get("value", 0)),
+                            "pnl": 0,
+                            "source": "paper",
+                        })
+                    total = data["total"]
+                    return jsonify({"trades": trades, "total": total, "page": data.get("page", page), "limit": data.get("limit", limit), "account": account_name})
                 for t in data["trades"]:
                     trades.append({
                         "timestamp": t.get("time", ""),
@@ -879,7 +915,7 @@ def api_order_status():
 @bp.route("/api/accounts")
 def api_accounts_list():
     """
-    List configured accounts (name + type) for strategy/UI. From config/accounts.yaml.
+    List configured accounts (name + type) for strategy/UI. From config/accounts/.
     """
     accounts = list_accounts_config()
     return jsonify({"accounts": accounts})
@@ -979,6 +1015,19 @@ def api_system_accounts_test():
     return jsonify({"ok": False, "error": "Connection failed", "url": _ppt_base() or ""}), 503
 
 
+@bp.route("/api/system/watchlist-names/refresh", methods=["POST"])
+@login_required_api
+def api_system_watchlist_names_refresh():
+    """Refresh PPT watchlist names from current account positions (DMS name per symbol). One button on status page."""
+    ppt = get_ppt_broker()
+    if not ppt:
+        return jsonify({"error": "PPT broker not configured"}), 503
+    result = ppt.refresh_watchlist_names_from_positions()
+    if result is None:
+        return jsonify({"error": "PPT unreachable or 401 (set webhook_token)"}), 503
+    return jsonify(result)
+
+
 @bp.route("/api/system/accounts/<name>/test", methods=["POST"])
 def api_system_account_test(name: str):
     """Test specific paper account: GET /api/account?account=name."""
@@ -1045,10 +1094,22 @@ def api_signal_cancel(signal_id):
 
 # ========== API: strategies (aggregate view) ==========
 
+def _get_strategy_config(strategy_name: str) -> dict:
+    """Get config from strategy's init_config() (in-code). Returns {} if strategy not found."""
+    try:
+        import zuilow.strategies as mod
+        cls = getattr(mod, strategy_name, None)
+        if cls is not None and hasattr(cls, "init_config") and callable(getattr(cls, "init_config")):
+            return cls.init_config() or {}
+    except Exception:
+        pass
+    return {}
+
+
 @bp.route("/api/strategies")
 @login_required
 def api_strategies():
-    """Strategy-centric view: strategy name -> jobs, run counts."""
+    """Strategy-centric view: strategy name -> jobs, run counts. Config from strategy init_config()."""
     s = get_scheduler()
     jobs = s.get_jobs() if s else []
     by_strategy = {}
@@ -1056,7 +1117,12 @@ def api_strategies():
         if not j.strategy:
             continue
         if j.strategy not in by_strategy:
-            by_strategy[j.strategy] = {"strategy": j.strategy, "jobs": [], "total_runs": 0}
+            by_strategy[j.strategy] = {
+                "strategy": j.strategy,
+                "jobs": [],
+                "total_runs": 0,
+                "config": _get_strategy_config(j.strategy),
+            }
         by_strategy[j.strategy]["jobs"].append({
             "name": j.name, "trigger": j.trigger, "run_count": j.run_count, "last_run": j.last_run.isoformat() if j.last_run else None,
         })
@@ -1128,15 +1194,47 @@ def api_scheduler_status():
             "strategy": j.strategy,
             "symbols": j.symbols,
             "trigger": j.trigger,
-            "mode": j.mode,
+            "account": j.account or None,
             "enabled": j.enabled,
             "is_running": j.is_running,
             "last_run": j.last_run.isoformat() if j.last_run else None,
             "next_run": j.next_run.isoformat() if j.next_run else None,
             "run_count": j.run_count,
             "error_count": j.error_count,
+            # trigger display
+            "cron": j.cron,
+            "minutes": j.minutes,
+            "hours": j.hours,
+            "days": j.days,
+            "open_bar_minutes": j.open_bar_minutes,
+            "market_close_time": getattr(j, "market_close_time", None),
+            "at_time_cron": j.at_time_cron,
+            "event_type": j.event_type,
         })
     return jsonify({"running": s.is_running, "jobs": jobs})
+
+
+@bp.route("/api/scheduler/jobs/<job_name>/trigger", methods=["POST"])
+def api_scheduler_job_trigger(job_name: str):
+    """Manually trigger one run of an enabled, user-defined (strategy) job."""
+    s = get_scheduler()
+    if s is None:
+        return jsonify({"ok": False, "error": "Scheduler not available"}), 500
+    ok = s.run_job_now(job_name)
+    if not ok:
+        return jsonify({"ok": False, "error": "Job not found, disabled, or not a strategy job"}), 400
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/scheduler/reload", methods=["POST"])
+@login_required
+def api_scheduler_reload():
+    """Reload scheduler config from scheduler.yaml. Use after editing yaml so enabled/disabled and job list take effect without restart."""
+    s = get_scheduler()
+    if s is None:
+        return jsonify({"ok": False, "error": "Scheduler not available"}), 500
+    ok = s.reload_config()
+    return jsonify({"ok": ok})
 
 
 @bp.route("/api/scheduler/statistics")
@@ -1184,7 +1282,7 @@ def api_backtest():
 
 @bp.route("/api/futu/connect", methods=["POST"])
 def api_futu_connect():
-    """Connect to FutuOpenD. Form params (host, port, unlock_password, rsa_file, acc_id) override config. Trading env is per-account (accounts.yaml)."""
+    """Connect to FutuOpenD. Form params (host, port, unlock_password, rsa_file, acc_id) override config. Trading env is per-account (config/accounts/)."""
     data = request.get_json(silent=True) or {}
     try:
         from zuilow.components.brokers.futu_gateway import FutuGateway, FutuConfig
@@ -1232,7 +1330,7 @@ def api_futu_disconnect():
 
 
 def _load_futu_config_for_api() -> dict:
-    """Load Futu config from futu.yaml for API (host, port, rsa_file). Trading env is per-account (accounts.yaml)."""
+    """Load Futu config from futu.yaml for API (host, port, rsa_file). Trading env is per-account (config/accounts/)."""
     from pathlib import Path
     import yaml
     config_path = Path(__file__).parent.parent / "config" / "brokers" / "futu.yaml"
@@ -1484,7 +1582,7 @@ def _ibkr_ensure_event_loop() -> None:
 
 
 def _ibkr_account_id_from_request() -> str | None:
-    """Resolve IBKR account id from query/body account name (config/accounts.yaml). None = use broker default."""
+    """Resolve IBKR account id from query/body account name (config/accounts/). None = use broker default."""
     account_name = (request.args.get("account") or (request.get_json(silent=True) or {}).get("account") or "").strip()
     if not account_name:
         return None
@@ -1496,7 +1594,7 @@ def _ibkr_account_id_from_request() -> str | None:
 
 @bp.route("/api/ibkr/account")
 def api_ibkr_account():
-    """IBKR account info. Optional query: account=<name> (from config/accounts.yaml)."""
+    """IBKR account info. Optional query: account=<name> (from config/accounts/)."""
     _ibkr_ensure_event_loop()
     broker = get_ibkr_broker()
     if not broker or not getattr(broker, "is_connected", False):
@@ -1578,7 +1676,7 @@ def api_ibkr_order_delete(order_id):
 
 @bp.route("/api/brokers/futu/accounts")
 def api_brokers_futu_accounts():
-    """List Futu Real accounts (from accounts.yaml env=REAL) with enabled state (from gateway; requires connected)."""
+    """List Futu Real accounts (from config/accounts/ env=REAL) with enabled state (from gateway; requires connected)."""
     broker = get_futu_broker()
     accounts = [
         {
@@ -1610,15 +1708,15 @@ def api_brokers_futu_account_enabled(name):
 
 
 def _futu_acc_id_from_request() -> int | None:
-    """Resolve Futu acc_id from query/body account name (config/accounts.yaml). None = use broker default."""
+    """Resolve Futu acc_id from query/body account name (config/accounts/). None = use broker default."""
     acc_id, _ = _futu_acc_id_and_env_from_request()
     return acc_id
 
 
 def _futu_acc_id_and_env_from_request() -> tuple[int | None, str | None]:
     """
-    Resolve (acc_id, trd_env) from query/body account name (config/accounts.yaml).
-    trd_env: account's env (REAL/SIMULATE) from accounts.yaml; None = use broker config default.
+    Resolve (acc_id, trd_env) from query/body account name (config/accounts/).
+    trd_env: account's env (REAL/SIMULATE) from config/accounts/; None = use broker config default.
     """
     account_name = (request.args.get("account") or (request.get_json(silent=True) or {}).get("account") or "").strip()
     if not account_name:

@@ -1,0 +1,4 @@
+# nn/grl、nn/sort 在 ZuiLow 容器内挂载时所需的依赖（推理/特征用）
+# 与 zuilow/requirements.txt 互补；torch 已在 Dockerfile 中按 PYTORCH_CUDA_AVAILABLE 安装
+matplotlib>=3.7.0
+scipy>=1.10.0

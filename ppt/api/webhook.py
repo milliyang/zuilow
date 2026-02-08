@@ -107,7 +107,9 @@ def webhook():
             old_qty = pos['qty']
             old_value = old_qty * pos['avg_price']
             new_qty = old_qty + filled_qty
-            new_avg_price = (old_value + filled_value) / new_qty
+            # 用未舍入的成交金额算均价，避免 filled_value 四舍五入到 2 位带来的累积误差
+            add_value = filled_qty * exec_price
+            new_avg_price = (old_value + add_value) / new_qty
             database.update_position(account_name, symbol, new_qty, new_avg_price)
         else:
             database.update_position(account_name, symbol, filled_qty, exec_price)

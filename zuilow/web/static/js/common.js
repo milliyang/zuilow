@@ -15,8 +15,10 @@ function formatNumber(val) {
 }
 
 function formatPnl(val, pct) {
-    const sign = val >= 0 ? '+' : '';
-    return `${sign}${formatMoney(val)} (${sign}${pct.toFixed(2)}%)`;
+    if (val == null && pct == null) return '--';
+    const sign = (val || 0) >= 0 ? '+' : '';
+    const pctStr = pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(2) : '--';
+    return `${sign}${formatMoney(val || 0)} (${pctStr}%)`;
 }
 
 function formatDate(date) {

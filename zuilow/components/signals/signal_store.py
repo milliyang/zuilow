@@ -101,6 +101,12 @@ class SignalStore:
                 CREATE INDEX IF NOT EXISTS idx_signals_trigger_at ON trading_signals(trigger_at);
             """)
             conn.commit()
+            # Migration: add error_message if not present (for failed signal reason)
+            cur = conn.execute("PRAGMA table_info(trading_signals)")
+            cols = [r[1] for r in cur.fetchall()]
+            if "error_message" not in cols:
+                conn.execute("ALTER TABLE trading_signals ADD COLUMN error_message TEXT")
+                conn.commit()
         finally:
             conn.close()
 
@@ -219,6 +225,7 @@ class SignalStore:
 
     def count_signals(
         self,
+        job_name: str | None = None,
         account: str | None = None,
         market: str | None = None,
         status: str | None = None,
@@ -233,7 +240,7 @@ class SignalStore:
         conn = self._conn()
         try:
             where_sql, params = self._list_signals_where(
-                account, market, status, kind, date_from, date_to
+                job_name, account, market, status, kind, date_from, date_to
             )
             row = conn.execute(
                 "SELECT COUNT(*) AS n FROM trading_signals WHERE 1=1" + where_sql,
@@ -245,6 +252,7 @@ class SignalStore:
 
     def _list_signals_where(
         self,
+        job_name: str | None,
         account: str | None,
         market: str | None,
         status: str | None,
@@ -254,6 +262,9 @@ class SignalStore:
     ) -> tuple[str, list[Any]]:
         sql = ""
         params: list[Any] = []
+        if job_name is not None:
+            sql += " AND job_name = ?"
+            params.append(job_name)
         if account is not None:
             sql += " AND account = ?"
             params.append(account)
@@ -276,6 +287,7 @@ class SignalStore:
 
     def list_signals(
         self,
+        job_name: str | None = None,
         account: str | None = None,
         market: str | None = None,
         status: str | None = None,
@@ -289,6 +301,7 @@ class SignalStore:
         List signals with optional filters (for API / UI).
 
         Args:
+            job_name: Optional job name filter
             account: Optional account filter
             market: Optional market filter
             status: Optional status filter (pending, executed, failed, cancelled)
@@ -304,7 +317,7 @@ class SignalStore:
         conn = self._conn()
         try:
             where_sql, params = self._list_signals_where(
-                account, market, status, kind, date_from, date_to
+                job_name, account, market, status, kind, date_from, date_to
             )
             params.extend([max(1, min(limit, 500)), max(0, offset)])
             sql = "SELECT * FROM trading_signals WHERE 1=1" + where_sql + " ORDER BY created_at DESC LIMIT ? OFFSET ?"
@@ -318,29 +331,37 @@ class SignalStore:
         signal_id: int,
         status: SignalStatus,
         executed_at: datetime | None = None,
+        error_message: str | None = None,
     ) -> bool:
         """
-        Update signal status and optionally executed_at.
+        Update signal status and optionally executed_at, error_message.
 
         Args:
             signal_id: Primary key
-            status: New status (e.g. SignalStatus.EXECUTED)
+            status: New status (e.g. SignalStatus.EXECUTED, SignalStatus.FAILED)
             executed_at: Optional timestamp when executed
+            error_message: Optional reason when status is failed (e.g. execution error)
 
         Returns:
             True if row was updated
         """
         conn = self._conn()
         try:
-            conn.execute(
-                "UPDATE trading_signals SET status = ?, executed_at = ? WHERE id = ?",
-                (status.value, executed_at.isoformat() if executed_at else None, signal_id),
-            )
+            try:
+                conn.execute(
+                    "UPDATE trading_signals SET status = ?, executed_at = ?, error_message = ? WHERE id = ?",
+                    (status.value, executed_at.isoformat() if executed_at else None, error_message, signal_id),
+                )
+            except Exception:
+                conn.execute(
+                    "UPDATE trading_signals SET status = ?, executed_at = ? WHERE id = ?",
+                    (status.value, executed_at.isoformat() if executed_at else None, signal_id),
+                )
             conn.commit()
             updated = conn.total_changes > 0
             if updated:
-                logger.info("db write signal update_status: signal_id=%s status=%s executed_at=%s",
-                            signal_id, status.value, executed_at)
+                logger.info("db write signal update_status: signal_id=%s status=%s executed_at=%s error_message=%s",
+                            signal_id, status.value, executed_at, (error_message[:80] + "..." if error_message and len(error_message) > 80 else error_message))
             return updated
         finally:
             conn.close()
@@ -379,6 +400,7 @@ class SignalStore:
             created_at=parse_iso(row["created_at"]) or ctrl.get_current_dt(),
             executed_at=parse_iso(row["executed_at"]),
             trigger_at=parse_iso(row["trigger_at"]),
+            error_message=row["error_message"] if "error_message" in row.keys() else None,
         )
 
 

@@ -1,0 +1,31 @@
+# Per-market execution: HK/US/BTC each have their own execution jobs; 
+# at trigger time they consume that market's pending signals.
+#
+# market_open_time (e.g. "09:30") + market_timezone (e.g. "America/New_York") together
+# give the open time for that market. The runner uses only these two fields from this file; 
+# there is no hardcoded market→timezone map in code.
+#
+# open_bar_minutes: during the session, run the executor every N minutes (e.g. 5 → 09:30, 09:35, 09:40…)
+# to consume pending signals for that market. Used by auto-added exec_{market}_bar jobs.
+#
+# market_close_time: run the executor once at this time (e.g. "16:00") to consume remaining pending signals.
+# Used by auto-added exec_{market}_close jobs.
+markets:
+  HK:
+    market_open_time: "09:30"
+    market_close_time: "16:00"
+    market_timezone: "Asia/Hong_Kong"
+    open_bar_minutes: 5                    # N minutes between bars
+    enabled: false
+  US:
+    market_open_time: "09:30"
+    market_close_time: "16:00"
+    market_timezone: "America/New_York"
+    open_bar_minutes: 15                    # N minutes between bars
+    enabled: true
+  BTC:
+    market_open_time: "00:00"
+    market_close_time: "23:59"
+    market_timezone: "UTC"
+    open_bar_minutes: 60                   # 24/7, 1 hour between bars
+    enabled: false

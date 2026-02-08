@@ -58,7 +58,7 @@ ibkr:
   timeout: 30         # 连接超时（秒）
 ```
 
-### 2. 账户配置 `config/accounts.yaml`
+### 2. 账户配置 `config/accounts/ (e.g. ibkr.yaml)`
 
 在 `accounts` 列表中加入 IBKR 账户，供 Live 页与统一下单使用：
 

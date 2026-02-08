@@ -1,20 +1,5 @@
 # Scheduler config
-# 市场固有执行时间：HK/US/BTC 各有独立执行任务，到点消费该市场的 pending 信号
-# market_open_time + market_timezone 一起定义「该市场开盘时刻」；trigger 只按配置换算，不再在代码里维护市场→时区
-markets:
-  HK:
-    market_open_time: "09:30"
-    market_timezone: "Asia/Hong_Kong"
-    open_bar_minutes: 5
-    enabled: false
-  US:
-    market_open_time: "09:30"
-    market_timezone: "America/New_York"
-    open_bar_minutes: 5
-    enabled: true
-  BTC:
-    open_bar_minutes: 60   # 24/7，按小时执行
-    enabled: false
+# Markets (HK/US/BTC open times and auto execution jobs) are in markets.yaml.
 
 scheduler:
   timezone: Asia/Hong_Kong
@@ -22,15 +7,14 @@ scheduler:
   max_workers: 3  # Max concurrent jobs
 
   jobs:
-    # HK market strategy -> account name (see config/accounts.yaml)
+    # HK market strategy -> account name (see config/accounts/*.yaml). Config from strategy init_config().
     - name: daily_sma
       strategy: SMAStrategy
-      config: strategies/sma_daily.yaml
       symbols: [HK.00700, HK.09988]
       trigger: cron
-      cron: "30 16 * * 1-5"
+      cron: "30 16 * * 1-5"             # Run every day at 16:30 (Monday to Friday) in Hong Kong time
       mode: live
-      account: "paper-trade-account-01"
+      account: "Paper-Trade-US-01"
       market: HK
       send_immediately: false
       priority: 1
@@ -39,12 +23,11 @@ scheduler:
     # US market strategy -> another account
     - name: intraday_rsi
       strategy: RSIStrategy
-      config: strategies/rsi_intraday.yaml
       symbols: [US.AAPL, US.TSLA]
       trigger: interval
-      minutes: 30
+      minutes: 30                        # Run every 30 minutes
       mode: live
-      account: "paper-trade-account-us02"
+      account: "Paper-Trade-US-02"
       market: US
       send_immediately: false
       priority: 5
@@ -52,45 +35,53 @@ scheduler:
 
     - name: buy_and_hold_us
       strategy: BuyAndHold
-      config: strategies/buy_and_hold.yaml
       symbols: [US.AAPL, US.TSLA]
       trigger: interval
-      #minutes: 30
-      hours: 5                  # 5小时执行一次
+      hours: 5                            # Run every 5 hours in Hong Kong time
       mode: live
-      account: "paper-trade-account-01"
+      account: "Paper-Trade-US-01"
       market: US
-      send_immediately: false    # 不立即发送信号，而是写入 SignalStore 等待市场执行
+      send_immediately: false    # Write to SignalStore for market execution instead of sending immediately
       priority: 5
       enabled: false
 
-    # 收盘后出调仓信号，次日开盘由 exec_US_open 在交易时间执行
+    - name: grl_5d_topk_reg
+      strategy: Grl5dTopkReg
+      symbols: []                         # No per-symbol on_bar; get_rebalance_output returns allocation
+      trigger: interval
+      days: 1                             # Run every 1 day in Hong Kong time
+      mode: live
+      account: "Paper-Trade-US-01"
+      market: US    
+      send_immediately: false
+      priority: 5
+      enabled: true
+
+    # Rebalance after close; exec_US_open runs at market open next day
     - name: rebalance_after_close
       strategy: RebalanceAfterClose
-      config: strategies/rebalance_after_close.yaml
       symbols: [US.AAPL, US.TSLA]
       trigger: cron
-      cron: "30 16 * * 1-5"
+      cron: "30 16 * * 1-5"             # Run every day at 16:30 (Monday to Friday) in Hong Kong time
       mode: live
-      account: "paper-trade-account-01"
+      account: "Paper-Trade-US-01"
       market: US
       send_immediately: false
       priority: 5
       enabled: false
 
-    # 测试用：随机 5 只 US 股票、随机权重，每 10 天调仓
+    # Test: random 5 US symbols and weights, rebalance every 10 days (config from strategy init_config())
     - name: bull5d_random
-      strategy: Bull5dRandom
-      config: strategies/bull5d_random.yaml
-      symbols: []   # 不逐标的跑 on_bar，由 get_rebalance_output 出 allocation
+      strategy: RandomBuyOrSell
+      symbols: []   # No per-symbol on_bar; get_rebalance_output returns allocation
       trigger: interval
-      hours: 240    # 10 天
+      hours: 240                        # Run every 10 days (240 hours) in Hong Kong time
       mode: live
-      account: "paper-trade-account-01"
+      account: "Paper-Trade-US-01"
       market: US
       send_immediately: false
       priority: 2                             # High priority
-      enabled: true
+      enabled: false
 
 # Notification (optional)
 notification:

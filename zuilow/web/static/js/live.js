@@ -125,21 +125,34 @@ async function refreshPositions() {
         
         const tbody = document.getElementById('positions-table');
         if (positions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#666;">No positions</td></tr>';
+            const hint = (data.hint || '').trim();
+            const msg = hint || 'No positions';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#8b949e;padding:12px;font-size:11px;">' + (hint ? hint : 'No positions') + '</td></tr>';
             return;
         }
         
-        tbody.innerHTML = positions.map(p => `
+        tbody.innerHTML = positions.map(p => {
+            const qty = p.quantity ?? p.qty ?? p.available ?? 0;
+            const qtyNum = parseInt(qty, 10) || 0;
+            const sym = (p.symbol || '').replace(/"/g, '&quot;');
+            const pnlClass = (p.pnl || 0) >= 0 ? 'positive' : 'negative';
+            return `
             <tr>
                 <td>${p.symbol}</td>
                 <td>${p.name || '--'}</td>
-                <td>${p.quantity}</td>
-                <td>${formatMoney(p.avg_price)}</td>
-                <td>${formatMoney(p.current_price)}</td>
-                <td class="${p.pnl >= 0 ? 'positive' : 'negative'}">${formatMoney(p.pnl)} (${p.pnl_pct.toFixed(2)}%)</td>
-                <td><button class="btn btn-danger" style="padding:2px 8px;font-size:11px;" onclick="closePosition('${p.symbol}', ${p.available})">Close</button></td>
+                <td class="num">${qtyNum}</td>
+                <td class="num">${formatMoney(p.avg_price)}</td>
+                <td class="num">${formatMoney(p.current_price)}</td>
+                <td class="num ${pnlClass}">${formatMoney(p.pnl)} (${(p.pnl_pct != null ? p.pnl_pct : 0).toFixed(2)}%)</td>
+                <td><button class="btn btn-danger btn-close-position" style="padding:2px 8px;font-size:11px;" data-symbol="${sym}" data-qty="${qtyNum}">Close</button></td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
+        document.querySelectorAll('.btn-close-position').forEach(btn => {
+            btn.addEventListener('click', function() {
+                closePosition(this.getAttribute('data-symbol'), this.getAttribute('data-qty'));
+            });
+        });
         
     } catch (e) {
         if (getLiveAccount() !== requestedAccount) return;
@@ -147,39 +160,112 @@ async function refreshPositions() {
     }
 }
 
+let ordersAll = [];
+let ordersPage = 1;
+const ORDERS_FETCH_LIMIT = 200;
+
+function formatOrderTime(ts) {
+    if (!ts) return '--';
+    try {
+        const d = new Date(ts);
+        const y = d.getUTCFullYear();
+        const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        const h = String(d.getUTCHours()).padStart(2, '0');
+        const min = String(d.getUTCMinutes()).padStart(2, '0');
+        return y + '/' + m + '/' + day + ' ' + h + ':' + min;
+    } catch (e) { return ts; }
+}
+
+function getOrdersPerPage() {
+    const el = document.getElementById('orders-per-page');
+    return el ? (parseInt(el.value, 10) || 20) : 20;
+}
+
+function renderOrdersPage() {
+    const tbody = document.getElementById('orders-table');
+    const perPage = getOrdersPerPage();
+    const total = ordersAll.length;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    ordersPage = Math.min(Math.max(1, ordersPage), totalPages);
+    const start = (ordersPage - 1) * perPage;
+    const slice = ordersAll.slice(start, start + perPage);
+
+    if (slice.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#666;">No orders</td></tr>';
+    } else {
+        tbody.innerHTML = slice.map(o => {
+            const orderTime = o.created_at || o.time || o.updated_at || '';
+            return `
+            <tr>
+                <td>${o.order_id}</td>
+                <td>${formatOrderTime(orderTime)}</td>
+                <td>${o.symbol}</td>
+                <td><span class="tag ${o.side}">${o.side === 'buy' ? 'Buy' : 'Sell'}</span></td>
+                <td class="num">${o.quantity}</td>
+                <td class="num">${formatMoney(o.price)}</td>
+                <td><span class="tag ${(o.status.includes('FILLED') || o.status.includes('DEALT')) ? 'filled' : 'pending'}">${o.status}</span></td>
+                <td>${/pending|submitted|waiting|presubmitted/i.test(o.status || '') ? `<button class="btn btn-secondary" style="padding:2px 8px;font-size:11px;" onclick="cancelOrder('${o.order_id}')">Cancel</button>` : '--'}</td>
+            </tr>
+        `;
+        }).join('');
+    }
+
+    const bar = document.getElementById('orders-pagination');
+    if (bar) {
+        bar.style.display = total > 0 ? 'flex' : 'none';
+        const firstBtn = document.getElementById('orders-first');
+        const prevBtn = document.getElementById('orders-prev');
+        const nextBtn = document.getElementById('orders-next');
+        const lastBtn = document.getElementById('orders-last');
+        if (firstBtn) {
+            firstBtn.disabled = ordersPage <= 1;
+            firstBtn.onclick = () => { ordersPage = 1; renderOrdersPage(); };
+        }
+        if (prevBtn) {
+            prevBtn.disabled = ordersPage <= 1;
+            prevBtn.onclick = () => { ordersPage = Math.max(1, ordersPage - 1); renderOrdersPage(); };
+        }
+        if (nextBtn) {
+            nextBtn.disabled = ordersPage >= totalPages;
+            nextBtn.onclick = () => { ordersPage = Math.min(totalPages, ordersPage + 1); renderOrdersPage(); };
+        }
+        if (lastBtn) {
+            lastBtn.disabled = ordersPage >= totalPages;
+            lastBtn.onclick = () => { ordersPage = totalPages; renderOrdersPage(); };
+        }
+        const pageInfo = document.getElementById('orders-page-info');
+        if (pageInfo) pageInfo.textContent = 'Page ' + ordersPage + ' of ' + totalPages;
+        const totalInfo = document.getElementById('orders-total-info');
+        if (totalInfo) totalInfo.textContent = 'Total: ' + total;
+    }
+
+    const perPageEl = document.getElementById('orders-per-page');
+    if (perPageEl && !perPageEl._bound) {
+        perPageEl._bound = true;
+        perPageEl.onchange = () => { ordersPage = 1; renderOrdersPage(); };
+    }
+}
+
 async function refreshOrders() {
     if (!connected) return;
     const requestedAccount = getLiveAccount();
-    const url = '/api/orders' + liveAccountParam();
+    const url = '/api/orders' + liveAccountParam() + '&limit=' + ORDERS_FETCH_LIMIT;
     try {
         const res = await fetch(url);
         if (getLiveAccount() !== requestedAccount) return;
         if (!res.ok) throw new Error('Fetch failed');
         const data = await res.json();
         if (getLiveAccount() !== requestedAccount) return;
-        const orders = Array.isArray(data) ? data : (data.orders || []);
-        
-        const tbody = document.getElementById('orders-table');
-        if (orders.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#666;">No orders</td></tr>';
-            return;
-        }
-        
-        tbody.innerHTML = orders.map(o => `
-            <tr>
-                <td>${o.order_id}</td>
-                <td>${o.symbol}</td>
-                <td><span class="tag ${o.side}">${o.side === 'buy' ? 'Buy' : 'Sell'}</span></td>
-                <td>${o.quantity}</td>
-                <td>${formatMoney(o.price)}</td>
-                <td><span class="tag ${(o.status.includes('FILLED') || o.status.includes('DEALT')) ? 'filled' : 'pending'}">${o.status}</span></td>
-                <td>${/pending|submitted|waiting|presubmitted/i.test(o.status || '') ? `<button class="btn btn-secondary" style="padding:2px 8px;font-size:11px;" onclick="cancelOrder('${o.order_id}')">Cancel</button>` : '--'}</td>
-            </tr>
-        `).join('');
-        
+        ordersAll = Array.isArray(data) ? data : (data.orders || []);
+        ordersPage = 1;
+        renderOrdersPage();
     } catch (e) {
         if (getLiveAccount() !== requestedAccount) return;
         log('Orders fetch failed: ' + e.message, 'error');
+        document.getElementById('orders-table').innerHTML = '<tr><td colspan="8" style="text-align:center;color:#666;">Error loading</td></tr>';
+        const bar = document.getElementById('orders-pagination');
+        if (bar) bar.style.display = 'none';
     }
 }
 
@@ -252,9 +338,9 @@ async function getQuote() {
             changeEl.className = 'quote-change';
         }
         
-        document.getElementById('q-open').textContent = data.open || data.open_price || '--';
-        document.getElementById('q-high').textContent = data.high || data.high_price || '--';
-        document.getElementById('q-low').textContent = data.low || data.low_price || '--';
+        document.getElementById('q-open').textContent = formatMoney(data.open ?? data.open_price);
+        document.getElementById('q-high').textContent = formatMoney(data.high ?? data.high_price);
+        document.getElementById('q-low').textContent = formatMoney(data.low ?? data.low_price);
         document.getElementById('q-volume').textContent = formatNumber(data.volume);
         document.getElementById('q-source').textContent = data.source || 'unknown';
         
@@ -321,12 +407,17 @@ async function placeOrder(side) {
 }
 
 async function closePosition(symbol, quantity) {
-    if (!confirm(`Confirm close ${quantity} ${symbol}?`)) return;
+    const qty = parseInt(quantity, 10) || 0;
+    if (qty <= 0) {
+        log('Close failed: quantity must be > 0', 'error');
+        return;
+    }
+    if (!confirm(`Confirm close ${qty} ${symbol}?`)) return;
     
     log(`Closing ${symbol}...`, 'info');
     
     try {
-        const body = { symbol, side: 'sell', quantity, price: null };
+        const body = { symbol, side: 'sell', qty, quantity: qty, price: null };
         if (getLiveAccount()) body.account = getLiveAccount();
         const res = await fetch('/api/order', {
             method: 'POST',

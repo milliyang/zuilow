@@ -10,7 +10,7 @@ Classes:
 
 JobConfig fields:
     name, strategy, config, symbols, trigger, mode, account, market, send_immediately,
-    cron, minutes, hours, event_type, event_condition, market_open_time, open_bar_minutes,
+    cron, minutes, hours, event_type, event_condition, market_open_time, market_close_time, open_bar_minutes,
     at_time_cron, priority, enabled, last_run, next_run, run_count, error_count, is_running
 
 Scheduler methods:
@@ -40,7 +40,7 @@ import time
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 import yaml
 
 from .triggers import (
@@ -86,7 +86,7 @@ class JobConfig:
         market: Market code (e.g. HK, US) for signals and execution jobs
         send_immediately: If True, send signals to gateway at once; else write to signal store only
         cron, minutes, hours, event_type, event_condition: For cron/interval/event triggers
-        market_open_time, market_timezone, open_bar_minutes, at_time_cron: For market_open/open_bar/at_time triggers
+        market_open_time, market_close_time, market_timezone, open_bar_minutes, at_time_cron: For market_open/market_close/open_bar/at_time triggers
         priority: Lower = higher priority (default 5)
         enabled: Whether job is enabled
         last_run, next_run, run_count, error_count, is_running: Runtime state
@@ -103,10 +103,12 @@ class JobConfig:
     cron: Optional[str] = None
     minutes: Optional[int] = None
     hours: Optional[int] = None
+    days: Optional[int] = None
     event_type: Optional[str] = None
     event_condition: Optional[dict] = None
     market_open_time: Optional[str] = None   # "09:30" for market_open trigger
-    market_timezone: Optional[str] = None    # e.g. "America/New_York"; used by market_open trigger (config is source of truth)
+    market_close_time: Optional[str] = None   # "16:00" for market_close trigger
+    market_timezone: Optional[str] = None    # e.g. "America/New_York"; used by market_open/market_close (config is source of truth)
     open_bar_minutes: Optional[int] = None  # for open_bar trigger
     at_time_cron: Optional[str] = None      # for at_time trigger
     priority: int = 5        # Lower = higher priority
@@ -148,7 +150,7 @@ class Scheduler:
 
     def _default_config_path(self) -> Path:
         """Default config path."""
-        return Path(__file__).parent.parent.parent / "config" / "scheduler.yaml"
+        return Path(__file__).parent.parent.parent / "config" / "scheduler" / "scheduler.yaml"
 
     def _load_config(self):
         """Load scheduler config."""
@@ -159,7 +161,17 @@ class Scheduler:
 
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
+                config = yaml.safe_load(f) or {}
+
+            # Load markets from config/scheduler/markets.yaml (same dir as scheduler.yaml)
+            markets_path = self.config_path.parent / "markets.yaml"
+            if markets_path.exists():
+                try:
+                    with open(markets_path, 'r', encoding='utf-8') as f:
+                        markets_data = yaml.safe_load(f) or {}
+                    config["markets"] = markets_data.get("markets", config.get("markets"))
+                except Exception as e:
+                    logger.warning("Load markets.yaml failed: %s", e)
 
             scheduler_config = config.get("scheduler", {})
             if not scheduler_config.get("enabled", True):
@@ -190,8 +202,10 @@ class Scheduler:
                     logger.info(f"Market {market_name} is disabled, skipping auto execution jobs")
                     continue
                 open_time = m.get("market_open_time")
+                close_time = m.get("market_close_time")
                 bar_minutes = m.get("open_bar_minutes")
                 open_job_name = f"exec_{market_name}_open"
+                close_job_name = f"exec_{market_name}_close"
                 bar_job_name = f"exec_{market_name}_bar"
                 if open_time and open_job_name not in self.jobs:
                     self.jobs[open_job_name] = JobConfig(
@@ -203,6 +217,16 @@ class Scheduler:
                         priority=3,
                     )
                     logger.info(f"Auto-added execution job: {open_job_name}")
+                if close_time and close_job_name not in self.jobs:
+                    self.jobs[close_job_name] = JobConfig(
+                        name=close_job_name,
+                        trigger="market_close",
+                        market=market_name,
+                        market_close_time=close_time,
+                        market_timezone=m.get("market_timezone") or None,
+                        priority=3,
+                    )
+                    logger.info(f"Auto-added execution job: {close_job_name}")
                 if bar_minutes and bar_job_name not in self.jobs:
                     self.jobs[bar_job_name] = JobConfig(
                         name=bar_job_name,
@@ -244,6 +268,17 @@ class Scheduler:
         except Exception as e:
             logger.error(f"Config load failed: {e}")
 
+    def reload_config(self) -> bool:
+        """Reload scheduler config from disk (scheduler.yaml). Use after editing yaml so enabled/disabled and job list take effect without restart. Returns True if load succeeded."""
+        try:
+            self.jobs.clear()
+            self._load_config()
+            logger.info("Scheduler config reloaded from %s", self.config_path)
+            return True
+        except Exception as e:
+            logger.error(f"Scheduler reload_config failed: {e}")
+            return False
+
     def start(self):
         """Start scheduler."""
         if self._running:
@@ -274,13 +309,23 @@ class Scheduler:
         """Current time: unified via ctrl (tick or stime fetch)."""
         return ctrl.get_current_dt()
 
+    def _is_execution_job(self, job: JobConfig) -> bool:
+        """True if job is market execution (open_bar, market_open, etc.), which consumes pending signals."""
+        return job.trigger in ("market_open", "market_close", "open_bar", "at_time")
+
     def run_one_tick(self) -> int:
         """
         Run one scheduler tick (for replay). Returns number of jobs executed.
+        Execution jobs (open_bar, market_open, ...) run after strategy jobs in the same tick
+        so they see signals just written by strategy jobs.
         """
         now = self._get_now()
         executed = 0
-        sorted_jobs = sorted(self.jobs.items(), key=lambda x: x[1].priority)
+        # 同一 tick 内先跑策略（产 signal），再跑执行（消费 pending）；key=(是否执行类, priority)
+        sorted_jobs = sorted(
+            self.jobs.items(),
+            key=lambda x: (self._is_execution_job(x[1]), x[1].priority),
+        )
         for job_name, job_config in sorted_jobs:
             if not job_config.enabled or job_config.is_running:
                 continue
@@ -295,7 +340,10 @@ class Scheduler:
         while self._running:
             try:
                 now = self._get_now()
-                sorted_jobs = sorted(self.jobs.items(), key=lambda x: x[1].priority)
+                sorted_jobs = sorted(
+                    self.jobs.items(),
+                    key=lambda x: (self._is_execution_job(x[1]), x[1].priority),
+                )
                 for job_name, job_config in sorted_jobs:
                     if not job_config.enabled:
                         continue
@@ -324,10 +372,10 @@ class Scheduler:
             trigger = CronTrigger(cron=job.cron)
             return trigger.should_run(now)
         elif trigger_type == TriggerType.INTERVAL:
-            if not job.minutes and not job.hours:
+            if not job.minutes and not job.hours and not job.days:
                 logger.error(f"Job {job.name} missing interval")
                 return False
-            trigger = IntervalTrigger(minutes=job.minutes, hours=job.hours)
+            trigger = IntervalTrigger(minutes=job.minutes, hours=job.hours, days=job.days)
             return trigger.should_run(now, last_run=job.last_run)
         elif trigger_type == TriggerType.EVENT:
             return False
@@ -340,9 +388,31 @@ class Scheduler:
                 timezone=(job.market_timezone or "").strip() or None,
             )
             return trigger.should_run(now)
+        elif trigger_type == TriggerType.MARKET_CLOSE:
+            if not job.market or not job.market_close_time:
+                return False
+            trigger = MarketOpenTrigger(
+                market=job.market,
+                time_str=job.market_close_time,
+                timezone=(job.market_timezone or "").strip() or None,
+            )
+            return trigger.should_run(now)
         elif trigger_type == TriggerType.OPEN_BAR:
             if not job.market:
                 return False
+            tz_str = (job.market_timezone or "").strip()
+            if tz_str:
+                try:
+                    from zoneinfo import ZoneInfo
+                    if now.tzinfo is None:
+                        now_utc = now.replace(tzinfo=timezone.utc)
+                    else:
+                        now_utc = now
+                    now_local = now_utc.astimezone(ZoneInfo(tz_str))
+                    if now_local.weekday() >= 5:
+                        return False
+                except Exception:
+                    pass
             minutes = job.open_bar_minutes or 5
             if job.last_run is None:
                 return True
@@ -396,7 +466,7 @@ class Scheduler:
         job.is_running = True
         logger.info(f"Executing job: {job.name} (priority: {job.priority})")
         import json
-        if job.trigger in ("market_open", "open_bar", "at_time"):
+        if job.trigger in ("market_open", "market_close", "open_bar", "at_time"):
             self._execute_market_execution(job)
             job.is_running = False
             return
@@ -412,9 +482,14 @@ class Scheduler:
         )
         history_id = history_db.add_history(history)
         try:
-            strategy_config = self.runner.load_strategy_config(job.config)
+            strategy_config = self.runner.get_strategy_config(job.strategy, job.config or None)
             strategy = self.runner.create_strategy(job.strategy, strategy_config)
-            signals = self.runner.run_strategy(strategy, job.symbols, job.mode, account=job.account or None)
+            signals = self.runner.run_strategy(
+                strategy, job.symbols, job.mode,
+                account=job.account or None,
+                job_name=job.name,
+                market=job.market or None,
+            )
             account = job.account or ""
             if signals:
                 for s in signals:
@@ -492,6 +567,27 @@ class Scheduler:
         if job_name in self.jobs:
             del self.jobs[job_name]
             logger.info(f"Removed job: {job_name}")
+
+    def run_job_now(self, job_name: str) -> bool:
+        """
+        Manually trigger one run of a job. Only allowed for enabled, user-defined (strategy) jobs.
+        Returns True if the job was submitted to run, False if not found, disabled, or not a strategy job.
+        """
+        job = self.jobs.get(job_name)
+        if not job:
+            return False
+        if not job.enabled:
+            return False
+        # Only user-defined jobs (have strategy); skip auto-injected exec_* jobs
+        if not (job.strategy and job.strategy.strip()):
+            return False
+        if job.is_running:
+            return False
+        if self._executor:
+            self._executor.submit(self._execute_job, job)
+        else:
+            self._execute_job(job)
+        return True
 
     def get_jobs(self) -> list[JobConfig]:
         """Get all jobs."""

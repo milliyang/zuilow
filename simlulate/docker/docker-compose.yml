@@ -10,10 +10,10 @@ services:
       dockerfile: simlulate/docker/Dockerfile.stime
     container_name: sim-stime
     ports:
-      - "${STIME_PORT:-11185}:11185"
+      - "${STIME_PORT:-11185}:${STIME_PORT:-11185}"
     environment:
-      - STIME_PORT=11185
-      - TICK_URLS=http://zuilow:11180/api/scheduler/tick,http://ppt:11182/api/scheduler/tick
+      - STIME_PORT=${STIME_PORT:-11185}
+      - TICK_URLS=http://zuilow:${ZUILOW_PORT:-11180}/api/scheduler/tick,http://ppt:${PPT_PORT:-11182}/api/scheduler/tick
       - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-sim_webhook_shared_token}
     volumes:
       - ../run/stime:/app/run
@@ -25,19 +25,27 @@ services:
     build:
       context: ${REPO_ROOT}
       dockerfile: simlulate/docker/Dockerfile.zuilow
+      args:
+        INSTALL_PYTORCH: ${INSTALL_PYTORCH:-false}
+        PYTORCH_CUDA_AVAILABLE: ${PYTORCH_CUDA_AVAILABLE:-false}
     container_name: sim-zuilow
     ports:
-      - "${ZUILOW_PORT:-11180}:11180"
+      - "${ZUILOW_PORT:-11180}:${ZUILOW_PORT:-11180}"
     environment:
       - HOST=0.0.0.0
-      - PORT=11180
-      - SIMULATION_TIME_URL=http://stime:11185
-      - PAPER_TRADE_URL=http://ppt:11182
+      - ZUILOW_PORT=${ZUILOW_PORT:-11180}
+      - SIMULATION_TIME_URL=http://stime:${STIME_PORT:-11185}
+      - PAPER_TRADE_URL=http://ppt:${PPT_PORT:-11182}
       - DMS_API_KEY=${DMS_API_KEY:-your-shared-secret}
       - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-sim_webhook_shared_token}
       - DMS_BASE_URL=${DMS_BASE_URL:-http://host.docker.internal:11183}
+      - PYTORCH_CUDA_AVAILABLE=${PYTORCH_CUDA_AVAILABLE:-false}
     volumes:
       - ../run/zuilow:/workspace/zuilow/run
+      # 可选：挂载 nn（grl/sort）供 GRL 策略用；REPO_ROOT 为 sai，nn 在 quant/nn 即 REPO_ROOT/../nn
+      - ${REPO_ROOT}/../nn:/workspace/nn
+      # 同时挂载到 /nn：容器内若 QUANT_ROOT 解析为 /（如 /zuilow/strategies/...）则策略会查 /nn
+      - ${REPO_ROOT}/../nn:/nn
     depends_on:
       - stime
     restart: unless-stopped
@@ -50,13 +58,16 @@ services:
       dockerfile: simlulate/docker/Dockerfile.ppt
     container_name: sim-ppt
     ports:
-      - "${PPT_PORT:-11182}:11182"
+      - "${PPT_PORT:-11182}:${PPT_PORT:-11182}"
     environment:
+      - PPT_PORT=${PPT_PORT:-11182}
       - SIMULATION_MODE=1
-      - SIMULATION_TIME_URL=http://stime:11185
+      - SIMULATION_TIME_URL=http://stime:${STIME_PORT:-11185}
       - DMS_BASE_URL=${DMS_BASE_URL:-http://host.docker.internal:11183}
       - DMS_API_KEY=${DMS_API_KEY:-your-shared-secret}
       - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-sim_webhook_shared_token}
+      # 使用绝对路径，避免 gunicorn 下 CWD 非 /workspace/ppt 时 run/db 找不到
+      - DB_FILE=/workspace/ppt/run/db/paper_trade.db
     volumes:
       - ../run/ppt:/workspace/ppt/run
     depends_on:

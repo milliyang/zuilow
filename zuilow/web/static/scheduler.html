@@ -56,6 +56,12 @@
         .jobs-table td.success { color: #3fb950; }
         .jobs-table td.failed { color: #f85149; }
         
+        .history-table { font-size: 12px; }
+        .history-table th, .history-table td { padding: 4px 8px; }
+        #history-pagination { font-size: 11px; color: #8b949e; margin: 0; }
+        #history-pagination button { padding: 4px 8px; font-size: 11px; }
+        #history-pagination select { padding: 2px 6px; font-size: 11px; }
+        
         .stats-row {
             display: flex;
             gap: 24px;
@@ -104,6 +110,7 @@
                     <button id="btn-start" class="btn btn-primary" style="padding:6px 14px;" onclick="startScheduler()">Start</button>
                     <button id="btn-stop" class="btn btn-danger" style="padding:6px 14px;" onclick="stopScheduler()" disabled>Stop</button>
                     <button class="btn btn-secondary" style="padding:6px 14px;" onclick="refreshStatus()">Refresh</button>
+                    <button class="btn btn-secondary" style="padding:6px 14px;" onclick="reloadScheduler()" title="Reload scheduler.yaml so enabled/disabled and job list take effect">Reload config</button>
                 </div>
             </div>
             
@@ -140,30 +147,47 @@
                     <tr>
                         <th>Job</th>
                         <th>Strategy</th>
-                        <th>Mode</th>
+                        <th>Account</th>
                         <th>Trigger</th>
                         <th>Symbols</th>
                         <th>Runs</th>
                         <th>Success</th>
                         <th>Failed</th>
                         <th>Last</th>
+                        <th style="width:80px;"></th>
                     </tr>
                 </thead>
                 <tbody id="jobs-container">
-                    <tr><td colspan="9" style="text-align:center; color:#8b949e; font-size:12px;">Loading...</td></tr>
+                    <tr><td colspan="10" style="text-align:center; color:#8b949e; font-size:12px;">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
         
         <!-- History -->
         <div class="card">
-            <div class="card-title">
-                <span>Run history</span>
-                <select id="filter-job" onchange="historyGoPage(1); loadHistory();" style="padding:4px 8px; font-size:11px; background:#0d1117; border:1px solid #21262d; border-radius:4px; color:#c9d1d9;">
-                    <option value="">All jobs</option>
-                </select>
+            <div class="card-title" style="flex-wrap: wrap; gap: 8px;">
+                <span style="display: flex; align-items: center; gap: 8px;">
+                    <span>Run history</span>
+                    <select id="filter-job" onchange="historyGoPage(1); loadHistory();" style="padding:4px 8px; font-size:11px; background:#0d1117; border:1px solid #21262d; border-radius:4px; color:#c9d1d9;">
+                        <option value="">All jobs</option>
+                    </select>
+                </span>
+                <div class="pagination" id="history-pagination" style="display:none;">
+                    <button type="button" id="history-first" onclick="historyFirst()">First</button>
+                    <button type="button" id="history-prev" onclick="historyPrev()">Prev</button>
+                    <span id="history-page-info">Page 1 of 1</span>
+                    <button type="button" id="history-next" onclick="historyNext()">Next</button>
+                    <button type="button" id="history-last" onclick="historyLast()">Last</button>
+                    <span>Per page</span>
+                    <select id="history-limit" onchange="historyGoPage(1); loadHistory();">
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    <span id="history-total-info">Total: 0</span>
+                </div>
             </div>
-            <table>
+            <table class="history-table">
                 <thead>
                     <tr>
                         <th>Job</th>
@@ -178,18 +202,6 @@
                     <tr><td colspan="6" style="text-align:center; color:#8b949e;">No history</td></tr>
                 </tbody>
             </table>
-            <div class="pagination" id="history-pagination" style="display:none; margin-top:10px;">
-                <button type="button" id="history-prev" onclick="historyPrev()">Prev</button>
-                <span id="history-page-info">Page 1 of 1</span>
-                <button type="button" id="history-next" onclick="historyNext()">Next</button>
-                <span>Per page</span>
-                <select id="history-limit" onchange="historyGoPage(1); loadHistory();">
-                    <option value="20" selected>20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
-                <span id="history-total-info">Total: 0</span>
-            </div>
             <div id="footer-time" style="font-size:11px;color:#8b949e;margin-top:12px;"></div>
         </div>
     </div>
@@ -221,6 +233,36 @@
                 }
             } catch (e) {
                 alert('Stop failed: ' + (e.message || String(e)));
+            }
+        }
+        
+        async function reloadScheduler() {
+            try {
+                const resp = await fetch('/api/scheduler/reload', { method: 'POST', credentials: 'include' });
+                const data = await resp.json();
+                if (data.ok) {
+                    refreshStatus();
+                    alert('Config reloaded. Enabled/disabled and job list are now from scheduler.yaml.');
+                } else {
+                    alert('Reload failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Reload failed: ' + (e.message || String(e)));
+            }
+        }
+        
+        async function triggerJob(jobName) {
+            if (!jobName) return;
+            try {
+                const resp = await fetch('/api/scheduler/jobs/' + encodeURIComponent(jobName) + '/trigger', { method: 'POST' });
+                const data = await resp.json();
+                if (data.ok) {
+                    refreshStatus();
+                } else {
+                    alert('Trigger failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Trigger failed: ' + (e.message || String(e)));
             }
         }
         
@@ -276,7 +318,7 @@
             jobs = Array.isArray(jobs) ? jobs.filter(function(j) { return j != null; }) : [];
             
             if (jobs.length === 0) {
-                container.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#8b949e; font-size:12px;">No jobs</td></tr>';
+                container.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#8b949e; font-size:12px;">No jobs</td></tr>';
                 const filter = document.getElementById('filter-job');
                 const savedVal = filter.value;
                 filter.innerHTML = '<option value="">All jobs</option>';
@@ -284,22 +326,44 @@
                 return;
             }
             
-            const triggerText = function(job) { return job.trigger === 'cron' ? (job.cron || '-') : (job.minutes != null ? job.minutes + ' min' : '-'); };
+            function triggerLabel(job) {
+                var t = job.trigger || '';
+                if (t === 'cron') return job.cron || 'cron';
+                if (t === 'interval') {
+                    if (job.minutes != null) return job.minutes + ' min';
+                    if (job.hours != null) return job.hours + ' h';
+                    if (job.days != null) return job.days + ' d';
+                    return 'interval';
+                }
+                if (t === 'market_open') return 'Market open';
+                if (t === 'market_close') return job.market_close_time ? 'Market close ' + job.market_close_time : 'Market close';
+                if (t === 'open_bar') return (job.open_bar_minutes != null ? job.open_bar_minutes + ' min bar' : 'Open bar');
+                if (t === 'at_time') return job.at_time_cron || 'At time';
+                if (t === 'event') return job.event_type || 'Event';
+                return t || '-';
+            }
             const symbolsText = function(job) { return (job.symbols || []).join(', ') || '-'; };
             const lastText = function(job) { return job.last_run ? new Date(job.last_run).toLocaleString() : 'Never'; };
             const runCount = function(job) { return job.run_count || 0; };
             const errorCount = function(job) { return job.error_count || 0; };
             
+            function actionCell(job) {
+                var isUserJob = job.strategy && String(job.strategy).trim();
+                if (!job.enabled || !isUserJob || job.is_running)
+                    return '<td></td>';
+                var safeName = escapeHtml(job.name || '');
+                return '<td><button type="button" class="btn btn-secondary job-trigger-btn" style="padding:4px 8px; font-size:11px;" data-job-name="' + safeName + '" onclick="triggerJob(this.getAttribute(\'data-job-name\'))">Run now</button></td>';
+            }
             container.innerHTML = jobs.map(function(job) {
                 const name = escapeHtml(job.name || '');
                 const strategy = escapeHtml(job.strategy || '-');
-                const mode = escapeHtml(job.mode || '-');
-                const trigger = escapeHtml(triggerText(job));
+                const account = escapeHtml(job.account || '-');
+                const trigger = escapeHtml(triggerLabel(job));
                 const symbols = escapeHtml(symbolsText(job));
                 const runs = runCount(job);
                 const errs = errorCount(job);
                 const last = lastText(job);
-                return '<tr><td><span class="job-name">' + name + '</span> <span class="tag ' + (job.enabled ? 'filled' : '') + '">' + (job.enabled ? 'Enabled' : 'Disabled') + '</span></td><td>' + strategy + '</td><td>' + mode + '</td><td>' + trigger + '</td><td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + symbols + '">' + symbols + '</td><td>' + runs + '</td><td class="success">' + (runs - errs) + '</td><td class="failed">' + errs + '</td><td style="font-size:11px; color:#8b949e;">' + last + '</td></tr>';
+                return '<tr><td><span class="job-name">' + name + '</span> <span class="tag ' + (job.enabled ? 'filled' : '') + '">' + (job.enabled ? 'Enabled' : 'Disabled') + '</span></td><td>' + strategy + '</td><td>' + account + '</td><td>' + trigger + '</td><td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + symbols + '">' + symbols + '</td><td>' + runs + '</td><td class="success">' + (runs - errs) + '</td><td class="failed">' + errs + '</td><td style="font-size:11px; color:#8b949e;">' + last + '</td>' + actionCell(job) + '</tr>';
             }).join('');
             
             // Update filter without firing change: save value, update options, restore value
@@ -312,8 +376,10 @@
         
         let historyPage = 1;
         function historyGoPage(p) { historyPage = Math.max(1, p); }
+        function historyFirst() { historyGoPage(1); loadHistory(); }
         function historyPrev() { historyGoPage(historyPage - 1); loadHistory(); }
         function historyNext() { historyGoPage(historyPage + 1); loadHistory(); }
+        function historyLast() { historyGoPage(999999); loadHistory(); }
         
         async function loadHistory() {
             try {
@@ -325,10 +391,11 @@
                 const data = await resp.json();
                 const list = data.histories || (Array.isArray(data) ? data : []);
                 const total = data.total != null ? data.total : list.length;
-                const page = data.page != null ? data.page : 1;
+                let page = data.page != null ? data.page : 1;
                 const limitResp = data.limit != null ? data.limit : limit;
-                historyPage = page;
                 const totalPages = Math.max(1, Math.ceil(total / limitResp));
+                if (historyPage > totalPages) { historyPage = totalPages; loadHistory(); return; }
+                historyPage = page;
                 
                 const tbody = document.getElementById('history-tbody');
                 const bar = document.getElementById('history-pagination');
@@ -364,8 +431,10 @@
                 bar.style.display = 'flex';
                 document.getElementById('history-page-info').textContent = 'Page ' + page + ' of ' + totalPages;
                 document.getElementById('history-total-info').textContent = 'Total: ' + total;
+                document.getElementById('history-first').disabled = page <= 1;
                 document.getElementById('history-prev').disabled = page <= 1;
                 document.getElementById('history-next').disabled = page >= totalPages;
+                document.getElementById('history-last').disabled = page >= totalPages;
             } catch (e) {
                 console.error('Load history failed:', e);
                 document.getElementById('history-pagination').style.display = 'none';

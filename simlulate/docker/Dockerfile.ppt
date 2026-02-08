@@ -24,12 +24,5 @@ WORKDIR /workspace/ppt
 
 EXPOSE 11182
 
-CMD ["gunicorn", \
-     "--bind", "0.0.0.0:11182", \
-     "--worker-class", "eventlet", \
-     "--workers", "1", \
-     "--reload", \
-     "--log-level", "debug", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "app:app"]
+# PPT_PORT from env (default 11182); use shell so env is expanded
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PPT_PORT:-11182} --worker-class eventlet --workers 1 --reload --log-level debug --access-logfile - --error-logfile - app:app"]

@@ -31,8 +31,9 @@ DataSourceManager features:
 """
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import logging
+import os
 import yaml
 
 import pandas as pd
@@ -202,7 +203,33 @@ class DataSourceManager:
                 data = None
 
         return data
-    
+
+    def get_history_batch(
+        self,
+        symbols: List[str],
+        start_date: datetime,
+        end_date: datetime,
+        interval: str = "1d",
+        source_name: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ) -> Dict[str, Optional[pd.DataFrame]]:
+        """Batch get history. Uses source.get_history_batch when available, else loop get_history."""
+        source = self._get_source(source_name)
+        if not source:
+            return {sym: None for sym in symbols}
+        getter = getattr(source, "get_history_batch", None)
+        if callable(getter):
+            try:
+                data = getter(symbols, start_date, end_date, interval, as_of=as_of)
+                if data is not None:
+                    return data
+            except Exception as e:
+                logger.debug("get_history_batch from primary failed: %s", e)
+        out: Dict[str, Optional[pd.DataFrame]] = {}
+        for sym in symbols:
+            out[sym] = self.get_history(sym, start_date, end_date, interval, source_name=source_name, as_of=as_of)
+        return out
+
     def save_data(
         self,
         symbol: str,
@@ -283,7 +310,11 @@ def get_manager() -> DataSourceManager:
                 with open(_dms_config, "r", encoding="utf-8") as f:
                     cfg = yaml.safe_load(f)
                 if cfg and isinstance(cfg.get("dms"), dict):
-                    _default_manager.add_source("dms", DmsSource(cfg["dms"]))
+                    dms_cfg = dict(cfg["dms"])
+                    # Env override for Docker/same-host: container uses host.docker.internal to reach DMS on host
+                    if os.environ.get("DMS_BASE_URL"):
+                        dms_cfg["base_url"] = (os.environ.get("DMS_BASE_URL") or "").strip().rstrip("/")
+                    _default_manager.add_source("dms", DmsSource(dms_cfg))
                     _default_manager.set_primary("dms")
                     _default_manager.set_fallback("yfinance")
                     logger.info("Loaded DMS data source (primary), yfinance as fallback")

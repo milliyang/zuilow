@@ -8,7 +8,7 @@ Paper trading uses a separate PPT (Paper Trade) service.
 
 Classes (main):
     DataSource, DataSourceConfig, DataSourceType, DataSourceManager, YFinanceSource, InfluxDB1Source
-    BacktestEngine, BacktestConfig, Strategy, SMAStrategy, RSIStrategy, SimulatedBroker, Executor
+    BacktestEngine, BacktestConfig, Strategy, SimulatedBroker, Executor
     FutuGateway, MarketService
     TradingSignal, SignalKind, SignalStatus, SignalStore
     SignalExecutor
@@ -39,9 +39,6 @@ from .components.backtest import (
     BacktestEngine,
     BacktestConfig,
     Strategy,
-    BuyAndHold,
-    SMAStrategy,
-    RSIStrategy,
     Signal,
     Bar,
     SimulatedBroker,

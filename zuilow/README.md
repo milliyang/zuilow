@@ -1,64 +1,64 @@
 # ZuiLow
 
-策略信号与市场执行解耦的任务调度系统：定义任务（策略 + 账号 + 市场），在指定时间预执行策略产生交易信号，在对应市场开盘/到点时执行信号（直接单或调仓单）。
+A task scheduler that decouples strategy signals from market execution: define jobs (strategy + account + market), run strategies at scheduled times to produce trading signals, and execute those signals at market open or at configured times (single orders or rebalance orders).
 
 ---
 
-## 核心概念
+## Core Concepts
 
-- **任务**：由策略、账号、市场、通知等组成；每个任务可指定使用的 **Market** 与 **Account**。
-- **策略预执行**：按 cron/interval/盘前/盘后等触发，运行策略生成**交易信号**（直接买卖 或 调仓比例），写入信号存储。
-- **市场执行**：按策略指定的市场，在 **市场开盘 / open_bar / 指定时间** 触发执行器，从存储取出该市场的 pending 信号，下单并更新状态。
-- **解耦原因**：策略可能计算量大、跨市场或依赖 GPU，提前算好信号，到点再执行，避免到盘才算导致延迟。
+- **Job**: Composed of strategy, account, market, notifications, etc.; each job specifies a **Market** and **Account**.
+- **Pre-execution**: Triggered by cron, interval, pre/post market, etc.; runs the strategy to generate **trading signals** (single buy/sell or target weights), which are written to the signal store.
+- **Market execution**: At **market open / open_bar / at_time** for the job’s market, the executor pulls pending signals for that account + market, calls `/api/order` (with account), executes single or rebalance orders, and updates signal status.
+- **Why decouple**: Strategies can be heavy, cross-market, or GPU-bound; computing signals ahead of time and executing at the bell avoids latency from computing at market open.
 
-### 交易信号类型
+### Signal Types
 
-- **直接买卖**：symbol、side、qty、（price）等。
-- **调仓 / 换股**：目标权重或目标市值，执行器根据账户资产与持仓计算买卖单并下单。
-
----
-
-## 工作流程
-
-1. **预执行**（cron / interval / 盘前盘后等）→ 跑策略 → 产出 TradingSignal → 写入 SignalStore（或 `send_immediately` 直发）。
-2. **市场执行**（market_open / open_bar / at_time）→ 执行器按 account + market 拉取 pending 信号 → 调用 `/api/order`（带 account）→ 直接单或调仓单执行 → 更新信号状态。
-
-详见 [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)。
+- **Single order**: symbol, side, qty, (price), etc.
+- **Rebalance / rotation**: Target weights or target notional; the executor derives buy/sell orders from account equity and positions, then places orders.
 
 ---
 
-## 网页管理
+## Workflow
 
-| 功能       | 说明 |
-|------------|------|
-| 系统状态   | 数据源、账号、Broker 连接状态 |
-| 账户       | 多账户（Paper / Futu / IBKR），按 account 查资产与持仓 |
-| Brokers    | Futu 连接、IBKR 连接、Paper Trade |
-| 任务调度器 | 策略任务配置、trigger、account、market、send_immediately |
-| 交易信号   | 信号列表与状态 |
-| 策略       | 策略视角信息 |
+1. **Pre-execution** (cron / interval / pre/post market, etc.) → run strategy → produce TradingSignal → write to SignalStore (or send via `send_immediately`).
+2. **Market execution** (market_open / open_bar / at_time) → executor fetches pending signals by account + market → calls `/api/order` (with account) → executes single or rebalance orders → updates signal status.
+
+See [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) for details.
 
 ---
 
-## 配置
+## Web UI
 
-- **config/accounts.yaml**：账户抽象（name、type、futu_acc_id / ibkr_account_id / paper_account）。
-- **config/brokers/**：Futu（futu.yaml）、IBKR（ibkr.yaml）。
-- **config/scheduler.yaml**：调度任务、市场开盘时间与时区、jobs（strategy、account、market、trigger）。
-- **config/strategies/**：各策略参数 YAML。
-- **config/brokers/ppt.yaml**、**config/users.yaml**：PPT 地址/Token、用户等。
-
----
-
-## 全栈模拟（回放/仿真）
-
-使用项目内 **stime/**（Simulation Time Service）+ ZuiLow tick + PPT tick）做统一仿真时间与回放，详见 [stime/doc/ARCH.md](../stime/doc/ARCH.md)（若存在）或项目根目录下的仿真文档。
+| Feature | Description |
+|---------|-------------|
+| System status | Data sources, accounts, broker connection status |
+| Account | Multi-account (Paper / Futu / IBKR); view assets and positions by account |
+| Brokers | Futu, IBKR, Paper Trade connection and config |
+| Scheduler | Job config: strategy, trigger, account, market, send_immediately |
+| Signals | Signal list and status |
+| Strategies | Strategy-centric view |
 
 ---
 
-## 文档与启动
+## Configuration
 
-- 架构与数据流：[doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)
-- 回测/测试：[doc/TESTING.md](doc/TESTING.md)
-- Futu / IBKR 配置：[doc/brokers/futu_setup.md](doc/brokers/futu_setup.md)、[doc/brokers/ibkr_setup.md](doc/brokers/ibkr_setup.md)
-- 启动：`./start_zuilow.sh` 或 `python -m zuilow.web.app`（见 `env.example` 与 `requirements.txt`）
+- **config/accounts/** (paper.yaml, futu.yaml, ibkr.yaml): Account abstraction (name, type, futu_acc_id / ibkr_account_id / paper_account).
+- **config/brokers/**: Futu (futu.yaml), IBKR (ibkr.yaml), PPT (ppt.yaml).
+- **config/scheduler.yaml**: Jobs, market open times and timezones (strategy, account, market, trigger).
+- **config/strategies/**: Per-strategy parameter YAML.
+- **config/brokers/ppt.yaml**, **config/users.yaml**: PPT base_url/token, web users.
+
+---
+
+## Full-Stack Simulation (Replay)
+
+Uses **stime/** (Simulation Time Service) + ZuiLow tick + PPT tick for unified sim time and replay. See [stime/doc/ARCH.md](../stime/doc/ARCH.md) (if present) or the repo root simulation docs.
+
+---
+
+## Docs and Run
+
+- Architecture and data flow: [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)
+- Backtest and testing: [doc/TESTING.md](doc/TESTING.md)
+- Futu / IBKR setup: [doc/brokers/futu_setup.md](doc/brokers/futu_setup.md), [doc/brokers/ibkr_setup.md](doc/brokers/ibkr_setup.md)
+- Run: `./start_zuilow.sh` or `python -m zuilow.app` (see `env.example` and `requirements.txt`)

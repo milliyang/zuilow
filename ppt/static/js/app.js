@@ -102,22 +102,36 @@ async function loadAccount() {
     if (positionValue) positionValue.textContent = formatMoney(data.position_value);
     if (pnl) {
         pnl.textContent = formatMoney(data.pnl);
-        pnl.className = 'stat-value ' + (data.pnl >= 0 ? 'positive' : 'negative');
+        pnl.className = 'overview-value ' + (data.pnl >= 0 ? 'positive' : 'negative');
     }
     if (pnlPct) {
         pnlPct.textContent = data.pnl_pct.toFixed(2) + '%';
-        pnlPct.className = 'stat-value ' + (data.pnl >= 0 ? 'positive' : 'negative');
+        pnlPct.className = 'overview-value ' + (data.pnl >= 0 ? 'positive' : 'negative');
     }
-    // Cost breakdown: commission, slippage, realized P&L
+    const u = data.unrealized_pnl;
+    const unrealizedEl = document.getElementById('unrealized-pnl');
+    if (unrealizedEl && u !== undefined) {
+        unrealizedEl.textContent = (u >= 0 ? '+' : '') + formatMoney(u);
+        unrealizedEl.className = 'overview-value ' + (u >= 0 ? 'positive' : 'negative');
+    }
+    // Trading breakdown: commission, slippage, realized P&L, net after costs
     const cs = data.cost_stats || {};
     const el = (id) => document.getElementById(id);
-    if (el('cost-commission')) el('cost-commission').textContent = formatMoney(-(cs.total_commission || 0));
-    if (el('cost-slippage')) el('cost-slippage').textContent = formatMoney(-(cs.total_slippage || 0));
+    const commission = -(cs.total_commission || 0);
+    const slippage = -(cs.total_slippage || 0);
     const rp = cs.total_realized_pnl != null ? cs.total_realized_pnl : 0;
+    if (el('cost-commission')) el('cost-commission').textContent = formatMoney(commission);
+    if (el('cost-slippage')) el('cost-slippage').textContent = formatMoney(slippage);
     const costRealized = el('cost-realized');
     if (costRealized) {
         costRealized.textContent = (rp >= 0 ? '+' : '') + formatMoney(rp);
-        costRealized.className = 'stat-value ' + (rp >= 0 ? 'positive' : 'negative');
+        costRealized.className = 'overview-value ' + (rp >= 0 ? 'positive' : 'negative');
+    }
+    const netAfterCosts = rp + commission + slippage;
+    const costNet = el('cost-net');
+    if (costNet) {
+        costNet.textContent = (netAfterCosts >= 0 ? '+' : '') + formatMoney(netAfterCosts);
+        costNet.className = 'overview-value ' + (netAfterCosts >= 0 ? 'positive' : 'negative');
     }
 }
 
@@ -150,7 +164,8 @@ async function loadPositions(realtime = false) {
         const pnlPctText = p.pnl_pct !== undefined ? 
             `<span class="${pnlClass}">${p.pnl_pct >= 0 ? '+' : ''}${p.pnl_pct.toFixed(2)}%</span>` : '-';
         const priceText = p.current_price ? formatMoney(p.current_price) : '-';
-        return `<tr><td>${p.symbol}</td><td class="num">${p.qty}</td><td class="num">${formatMoney(p.avg_price)}</td><td class="num">${priceText}</td><td class="num">${pnlText}</td><td class="num">${pnlPctText}</td></tr>`;
+        const costText = p.cost !== undefined ? formatMoney(p.cost) : '-';
+        return `<tr><td>${p.symbol}</td><td class="num">${p.qty}</td><td class="num">${costText}</td><td class="num">${priceText}</td><td class="num">${pnlText}</td><td class="num">${pnlPctText}</td></tr>`;
     }).join('');
     
     if (data.summary) {
@@ -168,14 +183,26 @@ async function loadPositionsRealtime() {
 
 // ========== Trades ==========
 
+function formatTradeTime(iso) {
+    if (!iso) return '--';
+    const d = iso.slice(0, 10);
+    const t = iso.indexOf('T') >= 0 ? iso.slice(11, 19) : ''; // HH:mm:ss
+    return t ? `${d} ${t}` : d;
+}
+
 async function loadTrades() {
     const res = await fetch('/api/trades');
     const data = await res.json();
     const list = document.getElementById('trades-list');
     if (!list) return;
-    list.innerHTML = data.trades.slice(-20).reverse().map(t => 
-        `<div class="trade-item trade-${t.side}">${t.time.split('T')[1].split('.')[0]} ${t.side.toUpperCase()} ${t.symbol} ${t.qty}@${t.price}</div>`
-    ).join('') || '<div style="color:#8b949e">No trades</div>';
+    list.innerHTML = data.trades.slice(-20).reverse().map(t => {
+        const dateTime = formatTradeTime(t.time).padEnd(19);
+        const side = t.side.toUpperCase().padEnd(4);
+        const symbol = (t.symbol || '').padEnd(12);
+        const qty = String(t.qty).padStart(6);
+        const price = Number(t.price).toFixed(4).padStart(10);
+        return `<div class="trade-item trade-${t.side}">${dateTime} ${side} ${symbol} ${qty}@  ${price}</div>`;
+    }).join('') || '<div style="color:#8b949e">No trades</div>';
 }
 
 async function placeOrder() {
@@ -203,22 +230,22 @@ async function placeOrder() {
 async function loadEquityChart() {
     const res = await fetch('/api/equity');
     const data = await res.json();
-    drawChart(data.history, data.initial_capital);
+    drawChart(data.history, data.initial_capital, data.benchmarks || {});
 }
 
 // Chart data for tooltip
-let chartData = { history: [], padding: {}, W: 0, H: 0, chartW: 0, chartH: 0, minPnl: 0, maxPnl: 0, range: 1 };
+let chartData = { history: [], benchmarks: {}, useIndex: false, padding: {}, W: 0, H: 0, chartW: 0, chartH: 0, minVal: 0, maxVal: 0, range: 1 };
 
-function drawChart(history, initialCapital) {
+function drawChart(history, initialCapital, benchmarks) {
     const canvas = document.getElementById('equity-chart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const W = canvas.width = canvas.offsetWidth || canvas.parentElement.offsetWidth;
     const H = canvas.height = 220;
-    
+
     ctx.clearRect(0, 0, W, H);
-    
+
     if (!history || history.length < 1) {
         ctx.fillStyle = '#8b949e';
         ctx.font = '12px sans-serif';
@@ -226,62 +253,90 @@ function drawChart(history, initialCapital) {
         chartData.history = [];
         return;
     }
-    
-    const padding = {top: 25, right: 65, bottom: 35, left: 50};
+
+    const padding = { top: 25, right: 65, bottom: 35, left: 50 };
     const chartW = W - padding.left - padding.right;
     const chartH = H - padding.top - padding.bottom;
-    
-    // Return range
-    const pnlPcts = history.map(h => h.pnl_pct);
-    const dataMin = Math.min(...pnlPcts);
-    const dataMax = Math.max(...pnlPcts);
-    // 10% margin, include 0
-    const margin = Math.max((dataMax - dataMin) * 0.1, 1);
-    const minPnl = Math.min(0, dataMin - margin);
-    const maxPnl = Math.max(0, dataMax + margin);
-    const range = maxPnl - minPnl;
-    
-    // Store for tooltip
-    chartData = { history, padding, W, H, chartW, chartH, minPnl, maxPnl, range };
-    
-    const isPositive = pnlPcts[pnlPcts.length-1] >= 0;
+
+    const hasBenchmarks = benchmarks && (benchmarks.spy?.length > 0 || benchmarks.qqq?.length > 0);
+    const useIndex = hasBenchmarks;
+
+    let minVal, maxVal, range;
+    let accountValues; // for Y: either pnl_pct or index 100
+
+    if (useIndex) {
+        accountValues = history.map(h => 100 * (h.equity / history[0].equity));
+        const spyVals = (benchmarks.spy || []).map(b => b.value);
+        const qqqVals = (benchmarks.qqq || []).map(b => b.value);
+        const allVals = [...accountValues, ...spyVals, ...qqqVals].filter(v => typeof v === 'number');
+        const dataMin = Math.min(...allVals, 100);
+        const dataMax = Math.max(...allVals, 100);
+        const margin = Math.max((dataMax - dataMin) * 0.1, 2);
+        minVal = Math.min(100, dataMin - margin);
+        maxVal = Math.max(100, dataMax + margin);
+        range = maxVal - minVal;
+    } else {
+        accountValues = history.map(h => h.pnl_pct);
+        const dataMin = Math.min(...accountValues);
+        const dataMax = Math.max(...accountValues);
+        const margin = Math.max((dataMax - dataMin) * 0.1, 1);
+        minVal = Math.min(0, dataMin - margin);
+        maxVal = Math.max(0, dataMax + margin);
+        range = maxVal - minVal;
+    }
+
+    chartData = { history, benchmarks: benchmarks || {}, useIndex, padding, W, H, chartW, chartH, minVal, maxVal, range, accountValues };
+
+    const isPositive = accountValues[accountValues.length - 1] >= (useIndex ? 100 : 0);
     const mainColor = isPositive ? '#3fb950' : '#f85149';
     const lightColor = isPositive ? 'rgba(63,185,80,0.15)' : 'rgba(248,81,73,0.15)';
-    
+
+    function yForValue(v) {
+        return padding.top + chartH * ((maxVal - v) / range);
+    }
+
     // Grid and Y labels
     ctx.fillStyle = '#6e7681';
     ctx.font = '10px -apple-system, sans-serif';
     ctx.textAlign = 'right';
-    
     const gridLines = 5;
     for (let i = 0; i <= gridLines; i++) {
-        const value = maxPnl - (range * i / gridLines);
+        const value = maxVal - (range * i / gridLines);
         const y = padding.top + (chartH * i / gridLines);
-        
-        // Grid
         ctx.strokeStyle = i === 0 || i === gridLines ? '#30363d' : '#21262d';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(padding.left, y);
         ctx.lineTo(W - padding.right, y);
         ctx.stroke();
-        
-        // Y label
-        const label = value >= 0 ? `+${value.toFixed(1)}%` : `${value.toFixed(1)}%`;
+        const label = useIndex ? value.toFixed(0) : (value >= 0 ? `+${value.toFixed(1)}%` : `${value.toFixed(1)}%`);
         ctx.fillText(label, padding.left - 8, y + 3);
     }
-    
-    // Zero line
-    const zeroY = padding.top + chartH * (maxPnl / range);
-    if (zeroY > padding.top && zeroY < H - padding.bottom) {
-        ctx.strokeStyle = '#484f58';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(padding.left, zeroY);
-        ctx.lineTo(W - padding.right, zeroY);
-        ctx.stroke();
+
+    if (!useIndex) {
+        const zeroY = yForValue(0);
+        if (zeroY > padding.top && zeroY < H - padding.bottom) {
+            ctx.strokeStyle = '#484f58';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, zeroY);
+            ctx.lineTo(W - padding.right, zeroY);
+            ctx.stroke();
+        }
+    } else {
+        const line100 = yForValue(100);
+        if (line100 > padding.top && line100 < H - padding.bottom) {
+            ctx.strokeStyle = '#484f58';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(padding.left, line100);
+            ctx.lineTo(W - padding.right, line100);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
     }
-    
+
     // X labels
     ctx.fillStyle = '#6e7681';
     ctx.font = '10px -apple-system, sans-serif';
@@ -290,28 +345,55 @@ function drawChart(history, initialCapital) {
     for (let i = 0; i < labelCount; i++) {
         const idx = Math.floor(i * (history.length - 1) / Math.max(labelCount - 1, 1));
         const x = padding.left + (idx / Math.max(history.length - 1, 1)) * chartW;
-        const date = history[idx].date;
-        const dateStr = date ? date.slice(5, 10) : '';
+        const dateStr = history[idx].date ? history[idx].date.slice(5, 10) : '';
         ctx.fillText(dateStr, x, H - 12);
     }
-    
-    // Curve points
-    const points = history.map((h, i) => ({
+
+    function drawLine(values, color, lineWidth) {
+        if (!values || values.length === 0) return;
+        const points = values.map((v, i) => ({
+            x: padding.left + (i / Math.max(history.length - 1, 1)) * chartW,
+            y: yForValue(v)
+        }));
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            const prev = points[i - 1], p = points[i];
+            const cpX = (prev.x + p.x) / 2;
+            ctx.quadraticCurveTo(prev.x, prev.y, cpX, (prev.y + p.y) / 2);
+            if (i === points.length - 1) ctx.quadraticCurveTo(cpX, (prev.y + p.y) / 2, p.x, p.y);
+        }
+        ctx.stroke();
+    }
+
+    // Draw benchmarks first (under account)
+    if (useIndex && benchmarks.qqq?.length) {
+        const qqqVals = benchmarks.qqq.map(b => b.value);
+        drawLine(qqqVals, '#a371f7', 1.5);
+    }
+    if (useIndex && benchmarks.spy?.length) {
+        const spyVals = benchmarks.spy.map(b => b.value);
+        drawLine(spyVals, '#58a6ff', 1.5);
+    }
+
+    // Account: fill then line
+    const points = accountValues.map((v, i) => ({
         x: padding.left + (i / Math.max(history.length - 1, 1)) * chartW,
-        y: padding.top + chartH * ((maxPnl - h.pnl_pct) / range)
+        y: yForValue(v)
     }));
-    
-    // Gradient fill
+    const zeroY = useIndex ? yForValue(minVal) : yForValue(0);
     const gradient = ctx.createLinearGradient(0, padding.top, 0, H - padding.bottom);
     gradient.addColorStop(0, lightColor);
     gradient.addColorStop(1, 'rgba(13,17,23,0)');
-    
     ctx.beginPath();
     ctx.moveTo(points[0].x, zeroY);
     points.forEach((p, i) => {
         if (i === 0) ctx.lineTo(p.x, p.y);
         else {
-            // Smooth curve
             const prev = points[i - 1];
             const cpX = (prev.x + p.x) / 2;
             ctx.quadraticCurveTo(prev.x, prev.y, cpX, (prev.y + p.y) / 2);
@@ -322,25 +404,8 @@ function drawChart(history, initialCapital) {
     ctx.closePath();
     ctx.fillStyle = gradient;
     ctx.fill();
-    
-    // Draw curve
-    ctx.strokeStyle = mainColor;
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    points.forEach((p, i) => {
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else {
-            const prev = points[i - 1];
-            const cpX = (prev.x + p.x) / 2;
-            ctx.quadraticCurveTo(prev.x, prev.y, cpX, (prev.y + p.y) / 2);
-            if (i === points.length - 1) ctx.quadraticCurveTo(cpX, (prev.y + p.y) / 2, p.x, p.y);
-        }
-    });
-    ctx.stroke();
-    
-    // Last point highlight
+    drawLine(accountValues, mainColor, 2.5);
+
     const lastPoint = points[points.length - 1];
     ctx.beginPath();
     ctx.arc(lastPoint.x, lastPoint.y, 5, 0, Math.PI * 2);
@@ -349,13 +414,37 @@ function drawChart(history, initialCapital) {
     ctx.strokeStyle = '#0d1117';
     ctx.lineWidth = 2;
     ctx.stroke();
-    
-    // Current value label
-    const last = history[history.length - 1];
+
+    const lastVal = accountValues[accountValues.length - 1];
     ctx.fillStyle = mainColor;
     ctx.font = 'bold 13px -apple-system, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`${last.pnl_pct >= 0 ? '+' : ''}${last.pnl_pct.toFixed(2)}%`, lastPoint.x + 10, lastPoint.y + 4);
+    if (useIndex) {
+        const pct = (lastVal - 100).toFixed(1);
+        ctx.fillText(`${pct >= 0 ? '+' : ''}${pct}%`, lastPoint.x + 10, lastPoint.y + 4);
+    } else {
+        ctx.fillText(`${lastVal >= 0 ? '+' : ''}${lastVal.toFixed(2)}%`, lastPoint.x + 10, lastPoint.y + 4);
+    }
+
+    // Legend when benchmarks present
+    if (useIndex) {
+        ctx.font = '10px -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        let legX = W - padding.right - 90;
+        const legY = padding.top - 4;
+        if (benchmarks.spy?.length) {
+            ctx.fillStyle = '#58a6ff';
+            ctx.fillText('SPY', legX, legY);
+            legX -= 32;
+        }
+        if (benchmarks.qqq?.length) {
+            ctx.fillStyle = '#a371f7';
+            ctx.fillText('QQQ', legX, legY);
+            legX -= 32;
+        }
+        ctx.fillStyle = mainColor;
+        ctx.fillText('Account', legX, legY);
+    }
 }
 
 // Tooltip on hover
@@ -371,32 +460,44 @@ function setupChartHover() {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
-        const { history, padding, chartW, chartH, maxPnl, range, W, H } = chartData;
-        
+        const { history, padding, chartW, chartH, maxVal, range, W, H, useIndex, accountValues, benchmarks } = chartData;
+
         // Hit test
         if (x < padding.left || x > W - padding.right) {
             tooltip.style.display = 'none';
             return;
         }
-        
+
         // Data index
         const ratio = (x - padding.left) / chartW;
         const idx = Math.round(ratio * (history.length - 1));
         const clampedIdx = Math.max(0, Math.min(history.length - 1, idx));
         const point = history[clampedIdx];
-        
+        const val = (accountValues && accountValues[clampedIdx] != null) ? accountValues[clampedIdx] : point.pnl_pct;
+
         // Point pos
         const pointX = padding.left + (clampedIdx / Math.max(history.length - 1, 1)) * chartW;
-        const pointY = padding.top + chartH * ((maxPnl - point.pnl_pct) / range);
-        
-        // Show tooltip
-        const pnlClass = point.pnl_pct >= 0 ? 'positive' : 'negative';
-        const pnlSign = point.pnl_pct >= 0 ? '+' : '';
-        tooltip.innerHTML = `
-            <div style="font-weight:600;margin-bottom:4px;">${point.date}</div>
-            <div>Equity: $${point.equity.toLocaleString()}</div>
-            <div class="${pnlClass}">Return: ${pnlSign}${point.pnl_pct.toFixed(2)}%</div>
-        `;
+        const pointY = padding.top + chartH * ((maxVal - val) / range);
+
+        let html = `<div style="font-weight:600;margin-bottom:4px;">${point.date}</div><div>Equity: $${point.equity.toLocaleString()}</div>`;
+        if (useIndex) {
+            const pct = (val - 100).toFixed(1);
+            const pnlClass = val >= 100 ? 'positive' : 'negative';
+            html += `<div class="${pnlClass}">Account: ${pct >= 0 ? '+' : ''}${pct}%</div>`;
+            if (benchmarks.spy && benchmarks.spy[clampedIdx] != null) {
+                const spyPct = (benchmarks.spy[clampedIdx].value - 100).toFixed(1);
+                html += `<div style="color:#58a6ff;">SPY: ${spyPct >= 0 ? '+' : ''}${spyPct}%</div>`;
+            }
+            if (benchmarks.qqq && benchmarks.qqq[clampedIdx] != null) {
+                const qqqPct = (benchmarks.qqq[clampedIdx].value - 100).toFixed(1);
+                html += `<div style="color:#a371f7;">QQQ: ${qqqPct >= 0 ? '+' : ''}${qqqPct}%</div>`;
+            }
+        } else {
+            const pnlClass = point.pnl_pct >= 0 ? 'positive' : 'negative';
+            const pnlSign = point.pnl_pct >= 0 ? '+' : '';
+            html += `<div class="${pnlClass}">Return: ${pnlSign}${point.pnl_pct.toFixed(2)}%</div>`;
+        }
+        tooltip.innerHTML = html;
         
         // Position tooltip
         let tooltipX = rect.left + pointX + 10;
@@ -412,32 +513,29 @@ function setupChartHover() {
         tooltip.style.display = 'block';
         
         // Redraw with indicator
-        drawChart(history);
+        drawChart(chartData.history, null, chartData.benchmarks);
         drawIndicator(clampedIdx);
     });
     
     canvas.addEventListener('mouseleave', () => {
         tooltip.style.display = 'none';
-        // Redraw without indicator
         if (chartData.history && chartData.history.length > 0) {
-            drawChart(chartData.history);
+            drawChart(chartData.history, null, chartData.benchmarks);
         }
     });
 }
 
 // Draw indicator line
 function drawIndicator(highlightIdx) {
-    const { history, padding, W, H, chartW, chartH, maxPnl, range } = chartData;
+    const { history, padding, W, H, chartW, chartH, maxVal, range, accountValues } = chartData;
     if (!history || history.length < 1) return;
-    
+    const val = (accountValues && accountValues[highlightIdx] != null) ? accountValues[highlightIdx] : history[highlightIdx].pnl_pct;
     const canvas = document.getElementById('equity-chart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
-    // Position
     const x = padding.left + (highlightIdx / Math.max(history.length - 1, 1)) * chartW;
-    const y = padding.top + chartH * ((maxPnl - history[highlightIdx].pnl_pct) / range);
+    const y = padding.top + chartH * ((maxVal - val) / range);
     
     // Vertical line
     ctx.strokeStyle = '#58a6ff';
@@ -640,40 +738,6 @@ async function loadAnalytics() {
         if (netProfit) {
             netProfit.textContent = formatMoney(ts.net_profit || 0);
             netProfit.className = (ts.net_profit >= 0 ? 'positive' : 'negative');
-        }
-        
-        // Position analysis
-        const pos = data.positions;
-        const posCount = document.getElementById('pos-count');
-        if (posCount) posCount.textContent = pos.total_positions || 0;
-        const posPct = document.getElementById('pos-pct');
-        if (posPct) posPct.textContent = pos.position_pct ? pos.position_pct + '%' : '0%';
-        const top1Pct = document.getElementById('top1-pct');
-        if (top1Pct) top1Pct.textContent = pos.concentration?.top1 ? pos.concentration.top1 + '%' : '-';
-        const hhi = document.getElementById('hhi');
-        if (hhi) hhi.textContent = pos.concentration?.hhi || '-';
-        
-        // Position bars
-        const barsDiv = document.getElementById('position-bars');
-        if (barsDiv && pos.positions && pos.positions.length > 0) {
-            barsDiv.innerHTML = pos.positions.slice(0, 5).map(p => {
-                const pnlClass = p.pnl >= 0 ? 'positive' : 'negative';
-                const pnlSign = p.pnl >= 0 ? '+' : '';
-                return `
-                    <div style="display:flex;align-items:center;margin-bottom:4px;">
-                        <span style="width:60px;color:#8b949e;">${p.symbol}</span>
-                        <div style="flex:1;background:#21262d;height:16px;border-radius:3px;position:relative;">
-                            <div style="width:${p.weight}%;background:#238636;height:100%;border-radius:3px;"></div>
-                            <span style="position:absolute;right:4px;top:0;font-size:10px;line-height:16px;">${p.weight}%</span>
-                        </div>
-                        <span class="${pnlClass}" style="width:80px;text-align:right;font-size:10px;">
-                            ${pnlSign}${formatMoney(p.pnl)}
-                        </span>
-                    </div>
-                `;
-            }).join('');
-        } else if (barsDiv) {
-            barsDiv.innerHTML = '<div style="color:#8b949e;">No positions</div>';
         }
         
     } catch (e) {

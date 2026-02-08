@@ -67,6 +67,13 @@ async function refreshAllNodes() {
             summaryEl.textContent = `(${online}/${total} online)`;
         }
         
+        // Webhook Token (API Key for server-to-server)
+        const webhookEl = document.getElementById('webhook-token-info');
+        if (webhookEl) {
+            const token = data.webhook_token;
+            webhookEl.innerHTML = '<strong style="display:inline-block;width:120px;">Webhook Token:</strong> ' + (token ? token : '(not set)');
+        }
+        
         // Display nodes
         displayNodes(data.nodes);
         
@@ -933,16 +940,21 @@ function displaySymbolInfo(info) {
     const latestDate = info.latest_date ? formatTime(info.latest_date) : 'N/A';
     const earliestDate = info.earliest_date ? formatTime(info.earliest_date) : 'N/A';
     
-    // Calculate days gap from latest date to now
+    // Calculate days gap: calendar days from latest data date to "today" (browser local date).
+    // Gap = missing calendar days; e.g. latest 02/05 and today 02/07 => gap 2 (02/06, 02/07 not in DB).
     let daysGap = 'N/A';
     let gapStatus = '';
+    let gapHint = '';
     if (info.latest_date) {
         const latest = new Date(info.latest_date);
         const now = new Date();
-        const diffTime = Math.abs(now - latest);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        // Use date-only for gap so it's calendar days (latest 02/05 00:00, today 02/07 => 2)
+        const latestDay = new Date(latest.getFullYear(), latest.getMonth(), latest.getDate());
+        const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const diffDays = Math.max(0, Math.round((todayDay - latestDay) / (1000 * 60 * 60 * 24)));
         daysGap = diffDays;
-        
+        const todayStr = todayDay.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+        gapHint = diffDays > 0 ? ` <span style="color:#6e7681;">(latest vs today ${todayStr})</span>` : '';
         if (diffDays > 7) {
             gapStatus = '<span style="color: #f85149;">⚠️ Data gap > 7 days</span>';
         } else if (diffDays > 1) {
@@ -959,7 +971,7 @@ function displaySymbolInfo(info) {
                 <span><strong style="color: #c9d1d9;">Latest:</strong> <span style="color: #c9d1d9;">${latestDate}</span></span>
                 <span><strong style="color: #c9d1d9;">Earliest:</strong> <span style="color: #c9d1d9;">${earliestDate}</span></span>
                 <span><strong style="color: #c9d1d9;">Count:</strong> <span style="color: #c9d1d9;">${info.data_count.toLocaleString()}</span></span>
-                <span><strong style="color: #c9d1d9;">Gap:</strong> <span style="color: #c9d1d9;">${daysGap} days</span></span>
+                <span><strong style="color: #c9d1d9;">Gap:</strong> <span style="color: #c9d1d9;">${daysGap} days</span>${gapHint}</span>
                 <span>${gapStatus}</span>
                 <span style="margin-left: auto;">
                     <button type="button" class="btn btn-primary btn-view-data" 

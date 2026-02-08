@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 _logger = logging.getLogger(__name__)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
-from typing import Optional, Union
+from typing import Any, List, Optional, Union
 
 from . import ctrl
 
@@ -216,17 +216,89 @@ def get_quote(symbol: str) -> dict:
     return _quote_from_dms(symbol, dms_base, as_of_iso, headers)
 
 
-def get_quotes_batch(symbols: list, max_workers: int = 5) -> dict:
+def get_quotes_batch(symbols: list, max_workers: int = 5, as_of_iso: Optional[str] = None) -> dict:
     """
-    Get quotes for multiple symbols from DMS (one read/batch). Uses sync time: sim passes as_of, real uses now.
-    When DMS_BASE_URL is not set, each symbol returns invalid.
+    Get quotes for multiple symbols from DMS (one read/batch).
+    as_of_iso: 若传入则用该时间取价（用于按指定日期更新净值）；否则 sim 用当前 sim 时间，real 用 now。
     """
     if not symbols:
         return {}
     dms_base, headers = _dms_base_and_headers()
     if not dms_base:
         return {s: {"symbol": s, "price": 0, "error": "DMS_BASE_URL not set", "valid": False} for s in symbols}
-    as_of_iso = get_current_datetime_iso() if is_sim_mode() else None
+    if as_of_iso is None:
+        as_of_iso = get_current_datetime_iso() if is_sim_mode() else None
     if len(symbols) == 1:
         return {symbols[0]: _quote_from_dms(symbols[0], dms_base, as_of_iso, headers)}
     return _quotes_batch_from_dms(symbols, dms_base, as_of_iso, headers)
+
+
+def get_benchmark_bars(
+    symbols: List[str],
+    start_date: Union[date, str],
+    end_date: Union[date, str],
+) -> dict:
+    """
+    Fetch daily bars from DMS for the given date range. Used for SPY/QQQ benchmark curves.
+
+    Returns:
+        {symbol: [(date_str, close), ...]} with date_str YYYY-MM-DD, sorted by date.
+        Empty list for symbol if DMS fails or no data.
+    """
+    dms_base, headers = _dms_base_and_headers()
+    if not dms_base:
+        return {s: [] for s in symbols}
+    if isinstance(start_date, str):
+        start_date = datetime.fromisoformat(start_date[:10]).date()
+    if isinstance(end_date, str):
+        end_date = datetime.fromisoformat(end_date[:10]).date()
+    start_dt = datetime(start_date.year, start_date.month, start_date.day, tzinfo=timezone.utc)
+    end_dt = datetime(end_date.year, end_date.month, end_date.day, tzinfo=timezone.utc)
+    try:
+        import requests
+        url = f"{dms_base}/api/dms/read/batch"
+        payload = {
+            "symbols": symbols,
+            "start_date": start_dt.isoformat(),
+            "end_date": end_dt.isoformat(),
+            "interval": "1d",
+        }
+        r = requests.post(url, json=payload, timeout=20, headers={**headers, "Content-Type": "application/json"})
+        if r.status_code != 200:
+            _logger.info("benchmark_bars dms: HTTP %s", r.status_code)
+            return {s: [] for s in symbols}
+        data = r.json()
+        result = {}
+        for s in symbols:
+            raw = data.get(s)
+            if not raw or not raw.get("data"):
+                result[s] = []
+                continue
+            records = raw["data"]
+            index_str = raw.get("index") or []
+            out = []
+            for i, rec in enumerate(records):
+                close = rec.get("Close") or rec.get("close")
+                if close is None:
+                    continue
+                try:
+                    p = float(close)
+                    if p <= 0:
+                        continue
+                except (TypeError, ValueError):
+                    continue
+                if index_str and i < len(index_str):
+                    # index can be "2024-01-01T00:00:00" or "2024-01-01"
+                    dt_str = index_str[i]
+                    date_str = dt_str[:10] if len(dt_str) >= 10 else dt_str
+                elif isinstance(rec.get("time"), str):
+                    date_str = rec["time"][:10]
+                else:
+                    continue
+                out.append((date_str, p))
+            out.sort(key=lambda x: x[0])
+            result[s] = out
+        return result
+    except Exception as e:
+        _logger.info("benchmark_bars dms: error=%s", e)
+        return {s: [] for s in symbols}

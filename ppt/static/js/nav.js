@@ -8,12 +8,12 @@
         .catch(function() {});
 })();
 
-// Page route config
+// Page route config (no icons, match ZuiLow nav style)
 const NAV_ROUTES = {
-    home: { path: '/', label: '📊 Trading', icon: '📊' },
-    watchlist: { path: '/watchlist', label: '📊 Watchlist', icon: '📊' },
-    cash: { path: '/cash', label: '💰 Cash', icon: '💰' },
-    ots: { path: '/ots', label: '⏰ Timestamps', icon: '⏰' }
+    home: { path: '/', label: 'Trading' },
+    watchlist: { path: '/watchlist', label: 'Watchlist' },
+    cash: { path: '/cash', label: 'Cash' },
+    ots: { path: '/ots', label: 'Timestamps' }
 };
 
 /**
@@ -76,21 +76,20 @@ function renderNav(title, currentRoute, userData) {
     
     const titleEl = document.createElement('h1');
     titleEl.className = 'header-title';
-    titleEl.innerHTML = `<img src="/static/icon4-dollar.svg" alt="" style="width:24px;height:24px;vertical-align:middle;margin-right:6px;">${title}`;
-    titleEl.style.cssText = 'margin:0;font-size:18px;display:flex;align-items:center;';
+    titleEl.textContent = title;
+    titleEl.style.cssText = 'margin:0;font-size:18px;font-weight:600;';
     leftSection.appendChild(titleEl);
     
     header.appendChild(leftSection);
 
     const rightSection = document.createElement('div');
-    rightSection.style.cssText = 'display:flex;align-items:center;gap:16px;';
+    rightSection.className = 'nav';
 
     Object.entries(NAV_ROUTES).forEach(([key, route]) => {
         const link = document.createElement('a');
         link.href = route.path;
         link.textContent = route.label;
-        link.className = 'nav-link' + (key === currentRoute ? ' current' : '');
-        link.style.cssText = 'text-decoration:none;font-size:13px;';
+        link.className = 'nav-link' + (key === currentRoute ? ' active' : '');
         if (key === currentRoute) {
             link.style.cursor = 'default';
             link.style.pointerEvents = 'none';
@@ -101,13 +100,14 @@ function renderNav(title, currentRoute, userData) {
     const userInfo = document.createElement('span');
     userInfo.id = 'user-info';
     userInfo.textContent = `${userData.username} (${userData.role})`;
-    userInfo.style.cssText = 'color:#8b949e;font-size:12px;';
+    userInfo.className = 'nav-user';
     rightSection.appendChild(userInfo);
 
     const logoutBtn = document.createElement('button');
-    logoutBtn.textContent = 'Logout';
+    logoutBtn.type = 'button';
+    logoutBtn.textContent = 'Log out';
+    logoutBtn.className = 'nav-logout';
     logoutBtn.onclick = logout;
-    logoutBtn.style.cssText = 'background:#21262d;border:none;color:#c9d1d9;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;';
     rightSection.appendChild(logoutBtn);
     
     header.appendChild(rightSection);

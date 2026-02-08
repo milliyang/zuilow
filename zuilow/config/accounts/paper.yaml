@@ -1,0 +1,11 @@
+# Paper Trade (PPT) accounts
+# paper_account maps to PPT account name
+
+accounts:
+  - name: Paper-Trade-US-01
+    type: paper
+    paper_account: default
+
+  - name: Paper-Trade-US-02
+    type: paper
+    paper_account: us-test02

@@ -1,4 +1,5 @@
 # Build with context = repo root (parent of simlulate). Zuilow app expects parent dir in path.
+# 构建时建议 DOCKER_BUILDKIT=1，以便 pip 使用 cache mount，避免重复从网络下载（如 torch）。
 FROM python:3.11-slim
 
 WORKDIR /workspace
@@ -6,10 +7,28 @@ WORKDIR /workspace
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Only when INSTALL_PYTORCH=true (QUANT_ROOT set and dir exists in env.sh): install torch and grl/sort deps.
+ARG INSTALL_PYTORCH=false
+ARG PYTORCH_CUDA_AVAILABLE=false
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$INSTALL_PYTORCH" = "true" ] || [ "$INSTALL_PYTORCH" = "True" ]; then \
+      if [ "$PYTORCH_CUDA_AVAILABLE" = "true" ] || [ "$PYTORCH_CUDA_AVAILABLE" = "True" ]; then \
+        pip install torch --index-url https://download.pytorch.org/whl/cu121; \
+      else \
+        pip install torch; \
+      fi; \
+    fi
+
 COPY zuilow/requirements.txt zuilow/
-RUN pip install --no-cache-dir -r zuilow/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r zuilow/requirements.txt
 
 COPY zuilow/ zuilow/
+COPY simlulate/docker/grl_sort_requirements.txt zuilow/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$INSTALL_PYTORCH" = "true" ] || [ "$INSTALL_PYTORCH" = "True" ]; then \
+      pip install -r zuilow/grl_sort_requirements.txt; \
+    fi
 # 去掉镜像内宿主的 run 数据，避免新卷挂载时被 Docker 用镜像内容初始化
 RUN rm -rf zuilow/run && mkdir -p zuilow/run/db zuilow/run/logs
 

@@ -22,7 +22,7 @@ FutuGateway methods:
     .get_market_snapshot(symbols: list[str]) -> list[dict]
 
 FutuGateway config:
-    FutuConfig: host, port, unlock_password, acc_id, rsa_file. Trading env is per-account (accounts.yaml).
+    FutuConfig: host, port, unlock_password, acc_id, rsa_file. Trading env is per-account (config/accounts/).
 
 FutuGateway features:
     - HK and US markets
@@ -72,7 +72,7 @@ class FutuMarket(Enum):
 
 @dataclass
 class FutuConfig:
-    """Futu config. Trading env is per-account (accounts.yaml), not here."""
+    """Futu config. Trading env is per-account (config/accounts/), not here."""
     host: str = "10.147.17.99"
     port: int = 11111
     unlock_password: str = ""
@@ -172,7 +172,7 @@ class FutuGateway:
                     logger.error(f"Account ID {self.config.acc_id} not found. Valid: {acc_ids}")
                     return False
             else:
-                # Prefer SIMULATE; trading env is per-account (accounts.yaml), not from futu.yaml
+                # Prefer SIMULATE; trading env is per-account (config/accounts/), not from futu.yaml
                 want_env = "SIMULATE"
                 connect_env = None
                 for _, row in data.iterrows():
@@ -358,7 +358,7 @@ class FutuGateway:
     # ========== Account ==========
 
     def _resolve_trd_env(self, trd_env=None):
-        """Resolve trd_env for API call. trd_env from account (accounts.yaml); when None use default SIMULATE."""
+        """Resolve trd_env for API call. trd_env from account (config/accounts/); when None use default SIMULATE."""
         if trd_env is None:
             return TrdEnv.SIMULATE
         if HAS_FUTU and isinstance(trd_env, str):

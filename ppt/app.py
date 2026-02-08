@@ -425,7 +425,7 @@ def handle_subscribe(data):
 # ============================================================
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 11182))
+    port = int(os.getenv('PPT_PORT', '11182'))
     debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
     
     database.init_db()

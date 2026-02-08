@@ -1,0 +1,24 @@
+# Futu accounts
+# futu_acc_id, env (REAL | SIMULATE); Live page uses account's env per request
+
+accounts:
+  - name: Futu-HK
+    type: futu
+    futu_acc_id: 281756477622125187
+    env: REAL
+
+  - name: Futu-US
+    type: futu
+    futu_acc_id: 281756455998496117
+    env: REAL
+
+  - name: Futu-Paper-Trade-CASH-HK
+    type: futu
+    futu_acc_id: 2802248
+    env: SIMULATE
+
+  # Margin simulate account (disabled: not working)
+  # - name: Futu-Paper-Trade-MARGIN-HK
+  #   type: futu
+  #   futu_acc_id: 7048357
+  #   env: SIMULATE

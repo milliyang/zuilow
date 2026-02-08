@@ -387,12 +387,23 @@ def add_trade(account_name: str, symbol: str, side: str, qty: int, price: float,
         return trade_id
 
 
-def get_trades(account_name: str, limit: int = 100) -> List[Dict]:
-    """获取成交记录"""
+def get_trades_count(account_name: str) -> int:
+    """Return total number of trades for the account."""
     with get_connection() as conn:
         cursor = conn.execute(
-            "SELECT * FROM trades WHERE account_name = ? ORDER BY id DESC LIMIT ?",
-            (account_name, limit)
+            "SELECT COUNT(*) FROM trades WHERE account_name = ?",
+            (account_name,)
+        )
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
+
+
+def get_trades(account_name: str, limit: int = 100, offset: int = 0) -> List[Dict]:
+    """获取成交记录，支持分页。"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM trades WHERE account_name = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+            (account_name, limit, offset)
         )
         return [dict(row) for row in cursor.fetchall()]
 
@@ -513,6 +524,17 @@ def get_min_equity_date(account_name: str) -> Optional[str]:
     with get_connection() as conn:
         cursor = conn.execute(
             "SELECT MIN(date) FROM equity_history WHERE account_name = ?",
+            (account_name,)
+        )
+        row = cursor.fetchone()
+        return row[0] if row and row[0] else None
+
+
+def get_max_equity_date(account_name: str) -> Optional[str]:
+    """返回该账户在 equity_history 中的最晚日期（YYYY-MM-DD）。用于「Update 净值」时只更新曲线最后一天，避免用当前持仓覆盖历史某日。"""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT MAX(date) FROM equity_history WHERE account_name = ?",
             (account_name,)
         )
         row = cursor.fetchone()
@@ -647,6 +669,19 @@ def remove_from_watchlist(symbol: str) -> bool:
         cursor = conn.execute("DELETE FROM watchlist WHERE symbol = ?", (symbol.upper(),))
         n = cursor.rowcount
         get_logger.info("db write remove_from_watchlist: symbol=%s rows_deleted=%s", symbol.upper(), n)
+        return n > 0
+
+
+def update_watchlist_name(symbol: str, name: str) -> bool:
+    """Update only the display name for a watchlist symbol. Returns True if a row was updated."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE watchlist SET name = ? WHERE symbol = ?",
+            (name.strip() if name else "", symbol.upper())
+        )
+        n = cursor.rowcount
+        if n:
+            get_logger.info("db write update_watchlist_name: symbol=%s name=%s", symbol.upper(), name)
         return n > 0
 
 

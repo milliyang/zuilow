@@ -52,18 +52,23 @@
         <button type="button" id="btnAdvance" class="btn btn-primary">Advance</button>
       </div>
       <div class="form-row" style="align-items:center;margin-top:8px;">
-        <input type="checkbox" id="chkFineStep" checked title="Step by 5, 15, or 30 minutes; daily cron will fire on the hour">
-        <label for="chkFineStep" style="margin-left:6px;font-size:12px;color:#8b949e;">Fine-grained step (5/15/30 min, avoid missing time in backtest)</label>
+        <input type="checkbox" id="chkFineStep" checked title="Step by 5/15/30/60/120/180 minutes; daily cron will fire on the hour">
+        <label for="chkFineStep" style="margin-left:6px;font-size:12px;color:#8b949e;">Fine-grained step (5/15/30/60/120/180 min, avoid missing time in backtest)</label>
       </div>
-      <div id="fineStepRow" class="form-row" style="margin-top:6px;display:none;flex-wrap:wrap;gap:8px;">
+      <div id="fineStepRow" class="form-row" style="margin-top:6px;display:none;flex-wrap:wrap;gap:8px;align-items:center;">
         <label style="font-size:12px;">Step interval</label>
         <select id="fineStepMinutes">
           <option value="5">5 min (one day = 288 steps)</option>
           <option value="15">15 min (one day = 96 steps)</option>
-          <option value="30" selected>30 min (one day = 48 steps)</option>
+          <option value="30">30 min (one day = 48 steps)</option>
+          <option value="60">60 min (one day = 24 steps; open/close also ticked)</option>
+          <option value="120">120 min (one day = 12 steps; open/close also ticked)</option>
+          <option value="180" selected>180 min (one day = 8 steps; open/close also ticked)</option>
         </select>
+        <label style="font-size:12px;color:#8b949e;">End date (optional)</label>
+        <input type="date" id="endDate" title="Stop when sim time reaches this date (inclusive)">
       </div>
-      <p id="fineStepHint" class="label" style="margin-top:6px;font-size:11px;color:#8b949e;display:none;">When checked: time is snapped to the interval boundary (e.g. 12:11 → 12:00 for 30 min), then one day of steps run. Daily cron (e.g. 09:00) will fire on the hour.</p>
+      <p id="fineStepHint" class="label" style="margin-top:6px;font-size:11px;color:#8b949e;display:none;">When checked: time is snapped to the interval boundary, then run until requested steps or end date. With 60/120/180 min, market open and close (e.g. 09:30, 16:00) also trigger a tick when env MARKET_OPEN_TIME/MARKET_CLOSE_TIME are set.</p>
     </div>
 
     <!-- Tick URLs and timeout (server POSTs to these in order per step; e.g. zuilow then ppt) -->

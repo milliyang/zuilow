@@ -260,6 +260,53 @@ th {
     letter-spacing: 0.3px;
 }
 
+/* Positions table: 等宽、紧凑，与 PPT 风格一致 */
+.positions-table {
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.positions-table th,
+.positions-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid #21262d;
+}
+.positions-table th.num,
+.positions-table td.num { text-align: right; }
+.positions-table td.num { white-space: nowrap; }
+.positions-table .positive { color: #3fb950; }
+.positions-table .negative { color: #f85149; }
+
+/* Orders table: 等宽、紧凑，与 Positions 一致 */
+.orders-table {
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.orders-table th,
+.orders-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid #21262d;
+}
+.orders-table th.num,
+.orders-table td.num { text-align: right; }
+.orders-table td.num { white-space: nowrap; }
+
+/* Dashboard trades table (same alignment as orders) */
+.trades-table {
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.trades-table th,
+.trades-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid #21262d;
+}
+.trades-table th.num,
+.trades-table td.num { text-align: right; }
+.trades-table td.num { white-space: nowrap; }
+
 /* Tag */
 .tag { 
     display: inline-block; 
@@ -304,33 +351,35 @@ th {
 .log-box .success { color: #3fb950; }
 .log-box .info { color: #58a6ff; }
 
-/* Quote Box */
+/* Quote Box - 等宽，价格类保留两位小数 */
 .quote-box {
     background: #0d1117;
     border: 1px solid #21262d;
     border-radius: 6px;
     padding: 16px;
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
 }
 
-.quote-symbol { 
-    font-size: 16px; 
-    font-weight: 600; 
-    color: #58a6ff; 
+.quote-symbol {
+    font-size: 16px;
+    font-weight: 600;
+    color: #58a6ff;
 }
-.quote-price { 
-    font-size: 28px; 
+.quote-price {
+    font-size: 28px;
     font-weight: 600;
     color: #f0f6fc;
-    margin: 8px 0; 
+    margin: 8px 0;
 }
-.quote-change { 
-    font-size: 14px; 
+.quote-change {
+    font-size: 14px;
 }
-.quote-info { 
-    display: flex; 
-    gap: 16px; 
-    font-size: 11px; 
-    color: #8b949e; 
+.quote-info {
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    color: #8b949e;
     margin-top: 12px;
     flex-wrap: wrap;
 }
