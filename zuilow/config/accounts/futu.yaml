@@ -4,17 +4,17 @@
 accounts:
   - name: Futu-HK
     type: futu
-    futu_acc_id: 281756477622125187
+    futu_acc_id: 223435781756477622125187
     env: REAL
 
   - name: Futu-US
     type: futu
-    futu_acc_id: 281756455998496117
+    futu_acc_id: 2815676575756455998496117
     env: REAL
 
   - name: Futu-Paper-Trade-CASH-HK
     type: futu
-    futu_acc_id: 2802248
+    futu_acc_id: 28047645362248
     env: SIMULATE
 
   # Margin simulate account (disabled: not working)
