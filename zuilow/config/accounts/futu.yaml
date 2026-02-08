@@ -20,5 +20,5 @@ accounts:
   # Margin simulate account (disabled: not working)
   # - name: Futu-Paper-Trade-MARGIN-HK
   #   type: futu
-  #   futu_acc_id: 7048357
+  #   futu_acc_id: 70sdfsdf48357
   #   env: SIMULATE
