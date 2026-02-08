@@ -53,7 +53,7 @@ Sai consists of five parts:
 - **Futu NiuNiu** — Disappointing!!! No sub-account, no US market simulation account.
 - **IBKR** — Also disappointing!!! No headless Gateway (terminal-only).
 
-This Project: From Backtest, Simulate to Real trading, it works !!!
+This Project: From Backtest, Simulate to Real trading,  it works !!!
 
 ### UI snapshots
 
