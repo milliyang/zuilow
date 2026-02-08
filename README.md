@@ -48,6 +48,13 @@ Sai consists of five parts:
 - **ZuiLow** — strategy scheduling and multi-broker execution
 - **simulate** — full-stack simulation (stime + ZuiLow + PPT + DMS)
 
+### To Brokers:
+
+- **Futu NiuNiu** — Disappointing!!! No sub-account, no US market simulation account.
+- **IBKR** — Also disappointing!!! No headless Gateway (terminal-only).
+
+This Project: From Backtest, Simulate to Real trading, it works !!!
+
 ### UI snapshots
 
 - **DMS**  
